@@ -4,8 +4,7 @@ A full-stack web application that evaluates Python algorithm solutions against c
 
 ## Overview
 The platform allows users to write, submit, and test Python code for algorithmic problems directly in the browser.  
-Submitted code is executed in a secure backend sandbox, which enforces time and memory limits while collecting execution statistics.  
-The frontend provides a clean, interactive editor and displays detailed results for each submission.
+Submitted code runs securely in a backend sandbox with time and memory limits, and the frontend displays execution results clearly and interactively.
 
 ## Tech Stack
 - **Frontend:** React, JavaScript, HTML, CSS  
@@ -14,16 +13,14 @@ The frontend provides a clean, interactive editor and displays detailed results 
 - **Deployment (planned):** Docker + Render / Railway  
 
 ## Features
-- Evaluate algorithm solutions in real time  
-- Display detailed runtime and memory usage  
-- Execute user code in a sandboxed environment with resource limits  
-- Built-in problem sets across core topics: arrays, graphs, and sorting  
-- Modular architecture for easily adding new problems and languages  
-- Modern React-based interface for writing and viewing solutions  
+- Evaluate Python code in real time  
+- Display runtime and memory usage  
+- Execute code securely with resource limits  
+- Include built-in algorithm problems (arrays, graphs, sorting)  
+- Provide clean, responsive UI for writing and testing solutions  
 
-## Future Enhancements
-- Support for C++ and Java execution  
-- Persistent user accounts and submission tracking  
-- Leaderboards and performance analytics  
-- Problem creation dashboard for instructors or researchers  
-- Cloud deployment and database integration
+## Next Steps
+- Add multiple test case support per problem  
+- Improve error handling and performance metrics  
+- Implement basic user session tracking  
+- Expand the problem library gradually
