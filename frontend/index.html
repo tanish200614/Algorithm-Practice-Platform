@@ -3,24 +3,364 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Algorithm Practice Platform</title>
+  <title>AlgoBattle — Fight for Runtime Supremacy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="container">
-    <h1>Algorithm Practice Platform</h1>
-    <textarea id="code" placeholder="Write your Python code here..."></textarea>
-    <button id="run-btn">Run Code</button>
 
-    <div class="output">
-      <h3>Output</h3>
-      <pre id="stdout"></pre>
-      <h3>Errors</h3>
-      <pre id="stderr"></pre>
-      <h3>Stats</h3>
-      <pre id="stats"></pre>
+  <!-- AUTH -->
+  <div id="screen-auth" class="screen active">
+    <div class="auth-bg">
+      <div class="grid-lines"></div>
+      <div class="scanline"></div>
+    </div>
+    <div class="auth-card">
+      <div class="auth-logo">ALGO<span class="logo-accent">BATTLE</span></div>
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tab-login">Login</button>
+        <button class="auth-tab" id="tab-register">Register</button>
+      </div>
+      <div id="auth-error" class="auth-error hidden"></div>
+      <input type="text"     id="auth-username" placeholder="Username"        autocomplete="username"      maxlength="16" />
+      <input type="password" id="auth-password" placeholder="Password"        autocomplete="current-password" />
+      <input type="password" id="auth-password2" placeholder="Confirm password" autocomplete="new-password" class="hidden" />
+      <button class="btn-primary" id="auth-submit">Login →</button>
     </div>
   </div>
+
+  <!-- LOBBY -->
+  <div id="screen-lobby" class="screen">
+    <div class="lobby-bg">
+      <div class="grid-lines"></div>
+      <div class="scanline"></div>
+    </div>
+    <div class="lobby-content">
+      <div class="lobby-topbar">
+        <span class="lobby-user-info" id="lobby-user-info"></span>
+        <button class="btn-ghost small" id="btn-logout">Logout</button>
+      </div>
+      <div class="logo-block">
+        <span class="logo-tag">// v2.0</span>
+        <h1 class="logo">ALGO<br><span class="logo-accent">BATTLE</span></h1>
+        <p class="logo-sub">Head-to-head algorithm warfare. Submit your solution. Watch runtimes diverge.</p>
+      </div>
+
+      <div class="lobby-actions">
+        <div class="action-card" id="card-create">
+          <div class="card-number">01</div>
+          <h2>Create Room</h2>
+          <p>Start a battle, get a 6-digit code, share it with your opponent.</p>
+          <div class="problem-select-wrap">
+            <label>Choose problem</label>
+            <div class="problem-select-row">
+              <select id="problem-select">
+                <option value="two_sum">Two Sum</option>
+                <option value="max_subarray">Maximum Subarray</option>
+                <option value="bubble_sort">Sort the Array</option>
+              </select>
+              <button class="btn-generate-problem" id="btn-open-generate" title="Generate a custom problem with AI">✦ AI</button>
+            </div>
+          </div>
+          <input type="text" id="create-name" placeholder="Your name" maxlength="16" />
+          <button class="btn-primary" id="btn-create">Create Room →</button>
+        </div>
+
+        <div class="divider-or"><span>OR</span></div>
+
+        <div class="action-card" id="card-join">
+          <div class="card-number">02</div>
+          <h2>Join Room</h2>
+          <p>Enter the code your opponent shared to drop into the battle.</p>
+          <input type="text" id="join-code" placeholder="Room code (e.g. AB12CD)" maxlength="6" />
+          <input type="text" id="join-name" placeholder="Your name" maxlength="16" />
+          <button class="btn-primary" id="btn-join">Join Battle →</button>
+        </div>
+      </div>
+
+      <div class="lobby-bottom-row">
+        <div class="matchmaking-card" id="card-matchmaking">
+          <div class="card-number">03</div>
+          <h2>Find Match</h2>
+          <p>Get paired with a player at similar rating automatically — no room code needed.</p>
+          <button class="btn-primary" id="btn-find-match">Find Opponent →</button>
+        </div>
+
+        <div class="tournament-card" id="card-tournament">
+          <div class="card-number">04</div>
+          <h2>Tournament</h2>
+          <p>4-8 players, single-elimination bracket. Host one or join with a code.</p>
+          <div class="tournament-lobby-actions">
+            <button class="btn-primary" id="btn-create-tournament">Host Tournament →</button>
+            <div class="tournament-join-row">
+              <input type="text" id="tournament-join-code" placeholder="Tournament code" maxlength="6" />
+              <button class="btn-ghost" id="btn-join-tournament">Join</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="solo-bar">
+        <span>Just want to practice solo?</span>
+        <button class="btn-ghost" id="btn-solo">Open Solo Editor →</button>
+      </div>
+
+      <div class="leaderboard-panel">
+        <div class="leaderboard-title">Top Players</div>
+        <div class="leaderboard-list" id="leaderboard-list">
+          <div class="leaderboard-empty">No battles yet</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WAITING ROOM -->
+  <div id="screen-waiting" class="screen">
+    <div class="waiting-inner">
+      <div class="waiting-header">
+        <span class="tag">Waiting for opponent</span>
+        <div class="room-code-display">
+          <span class="room-code-label">Room Code</span>
+          <span class="room-code-value" id="display-room-code">------</span>
+          <button class="btn-copy" id="btn-copy-code" title="Copy">⎘</button>
+        </div>
+      </div>
+      <div class="problem-preview" id="waiting-problem-preview"></div>
+      <div class="player-slots">
+        <div class="player-slot" id="slot-p1">
+          <div class="slot-dot active"></div>
+          <span id="slot-p1-name">You</span>
+          <span class="slot-status">Connected</span>
+        </div>
+        <div class="vs-badge">VS</div>
+        <div class="player-slot" id="slot-p2">
+          <div class="slot-dot waiting-pulse"></div>
+          <span id="slot-p2-name">Waiting...</span>
+          <span class="slot-status" id="slot-p2-status">Not connected</span>
+        </div>
+      </div>
+      <div class="waiting-hint">Share your room code — battle starts automatically when both players submit.</div>
+    </div>
+  </div>
+
+  <!-- BATTLE ARENA -->
+  <div id="screen-battle" class="screen">
+    <div class="arena-layout">
+
+      <!-- Left: problem + editor -->
+      <div class="arena-left">
+        <div class="arena-header">
+          <div class="arena-players" id="arena-players-bar"></div>
+          <div class="battle-status-badge" id="battle-status-badge">CODING</div>
+        </div>
+        <div class="problem-panel" id="battle-problem-panel"></div>
+        <div class="editor-wrap">
+          <div class="editor-toolbar">
+            <div class="lang-selector">
+              <button class="lang-btn active" data-lang="python">Python</button>
+              <button class="lang-btn" data-lang="cpp">C++</button>
+              <button class="lang-btn" data-lang="java">Java</button>
+            </div>
+            <div class="toolbar-actions">
+              <button class="btn-run-small" id="arena-test-btn">Test Run</button>
+              <button class="btn-asm hidden" id="arena-asm-btn">⊞ ASM</button>
+            </div>
+          </div>
+          <textarea id="arena-code" spellcheck="false" placeholder="Write your solution here..."></textarea>
+        </div>
+        <div class="arena-bottom-bar">
+          <div class="test-output-mini" id="arena-test-output"></div>
+          <button class="btn-submit" id="arena-submit-btn">
+            <span class="submit-icon">⚡</span> Submit & Race
+          </button>
+        </div>
+        <div class="asm-panel hidden" id="arena-asm-panel">
+          <div class="asm-panel-header">
+            <span class="asm-panel-title">Assembly · g++ -O2</span>
+            <span class="asm-speedup" id="arena-asm-speedup"></span>
+            <button class="btn-asm-close" id="arena-asm-close">✕</button>
+          </div>
+          <pre class="asm-code" id="arena-asm-code"></pre>
+        </div>
+      </div>
+
+      <!-- Right: race results -->
+      <div class="arena-right">
+        <div class="race-panel">
+          <div class="race-header">
+            <h3>Runtime Race</h3>
+            <span class="race-subtitle">Higher N = harder input</span>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="race-chart"></canvas>
+            <div class="chart-placeholder" id="chart-placeholder">
+              <div class="chart-placeholder-icon">📊</div>
+              <p>Chart appears after both players submit</p>
+            </div>
+          </div>
+          <div class="race-legend" id="race-legend"></div>
+          <div class="winner-banner" id="winner-banner">
+            <div class="winner-banner-top">
+              <span class="winner-crown">🏆</span>
+              <div>
+                <div class="winner-label">Winner</div>
+                <div class="winner-name" id="winner-name-display"></div>
+              </div>
+            </div>
+            <div class="winner-detail" id="winner-detail"></div>
+            <div class="race-insights" id="race-insights"></div>
+            <div class="winner-actions">
+              <button class="btn-primary" id="btn-rematch">Rematch</button>
+              <button class="btn-ghost" id="btn-interview-mode">Interview Me →</button>
+              <button class="btn-ghost" id="btn-lobby">Back to Lobby</button>
+            </div>
+          </div>
+          <div class="race-result-cards" id="race-result-cards"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Winner overlay (hidden, kept for JS compat) -->
+    <div class="winner-overlay hidden" id="winner-overlay">
+      <div class="winner-box">
+        <div class="winner-crown">🏆</div>
+        <div class="winner-label">Winner</div>
+        <div class="winner-name" id="winner-name-display-old"></div>
+        <div class="winner-detail" id="winner-detail-old"></div>
+        <div class="winner-actions">
+          <button class="btn-primary" id="btn-rematch">Rematch</button>
+          <button class="btn-ghost" id="btn-lobby">Back to Lobby</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SOLO MODE -->
+  <div id="screen-solo" class="screen">
+    <div class="solo-layout">
+      <div class="solo-top-bar">
+        <button class="btn-ghost small" id="btn-back-lobby">← Lobby</button>
+        <h2>Solo Practice</h2>
+        <span></span>
+      </div>
+      <textarea id="solo-code" spellcheck="false" placeholder="Write your Python code here..."></textarea>
+      <button class="btn-primary" id="solo-run-btn">▶ Run Code</button>
+      <div class="solo-output">
+        <div class="output-section">
+          <label>Output</label>
+          <pre id="solo-stdout"></pre>
+        </div>
+        <div class="output-section">
+          <label>Errors</label>
+          <pre id="solo-stderr" class="err"></pre>
+        </div>
+        <div class="output-section">
+          <label>Stats</label>
+          <pre id="solo-stats"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GENERATE PROBLEM MODAL -->
+  <div id="generate-modal" class="fullscreen-overlay hidden">
+    <div class="overlay-card generate-card">
+      <div class="generate-header">
+        <span class="generate-tag">✦ AI Problem Generator</span>
+        <button class="btn-overlay-close" id="btn-close-generate">✕</button>
+      </div>
+      <p class="generate-hint">Describe a variant or a completely new problem — the AI will write it, including test cases and a validator.</p>
+      <textarea id="generate-description" placeholder="e.g. Two Sum but the array is sorted and you can't use extra space&#10;e.g. Find the length of the longest palindromic substring&#10;e.g. Given a matrix, return all elements in spiral order" rows="4"></textarea>
+      <button class="btn-primary" id="btn-generate-submit">Generate Problem →</button>
+      <div id="generate-status" class="generate-status hidden"></div>
+      <div id="generate-preview" class="generate-preview hidden">
+        <div class="generate-preview-title" id="generate-preview-title"></div>
+        <div class="generate-preview-desc" id="generate-preview-desc"></div>
+        <div class="generate-preview-actions">
+          <button class="btn-primary" id="btn-use-problem">Use this Problem →</button>
+          <button class="btn-ghost" id="btn-regenerate">Try Again</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INTERVIEW OVERLAY -->
+  <div id="interview-overlay" class="fullscreen-overlay hidden">
+    <div class="interview-layout">
+      <div class="interview-left">
+        <div class="interview-left-header">
+          <span class="interview-tag">Technical Interview</span>
+          <button class="btn-overlay-close" id="btn-close-interview">✕</button>
+        </div>
+        <div class="interview-problem-title" id="interview-problem-title"></div>
+        <pre class="interview-code" id="interview-code"></pre>
+      </div>
+      <div class="interview-right">
+        <div class="interview-chat" id="interview-chat"></div>
+        <div class="interview-input-row">
+          <textarea id="interview-input" placeholder="Your answer..." rows="2"></textarea>
+          <button class="btn-primary interview-send-btn" id="interview-send">Send</button>
+        </div>
+        <div class="interview-meta" id="interview-meta"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MATCHMAKING OVERLAY -->
+  <div id="matchmaking-overlay" class="fullscreen-overlay hidden">
+    <div class="overlay-card">
+      <div class="searching-rings">
+        <div class="ring ring-1"></div>
+        <div class="ring ring-2"></div>
+        <div class="ring ring-3"></div>
+        <div class="search-icon-inner">⚔</div>
+      </div>
+      <h2 class="overlay-title">Finding Opponent</h2>
+      <div class="overlay-status" id="match-status">Searching...</div>
+      <div class="overlay-sub" id="match-elo"></div>
+      <div class="overlay-sub" id="match-queue"></div>
+      <button class="btn-ghost" id="btn-cancel-matchmaking">Cancel</button>
+    </div>
+  </div>
+
+  <!-- TOURNAMENT SCREEN -->
+  <div id="screen-tournament" class="screen">
+    <div class="tournament-layout">
+      <div class="tournament-topbar">
+        <button class="btn-ghost small" id="btn-leave-tournament">← Leave</button>
+        <div class="tournament-code-block">
+          <span class="room-code-label">Tournament</span>
+          <span class="room-code-value" id="tournament-code-display">------</span>
+          <button class="btn-copy" id="btn-copy-tournament-code" title="Copy">⎘</button>
+        </div>
+        <div class="tournament-status-badge" id="tournament-status-badge">Lobby</div>
+      </div>
+
+      <div class="tournament-main">
+        <div class="tournament-players-panel">
+          <div class="t-panel-header">
+            <h3>Players <span id="tournament-player-count">(0)</span></h3>
+          </div>
+          <div class="tournament-player-list" id="tournament-player-list"></div>
+          <div class="tournament-host-controls" id="tournament-host-controls">
+            <button class="btn-primary" id="tournament-start-btn">Start Tournament →</button>
+            <div class="t-min-note" id="t-min-note">Need 4 players to start</div>
+          </div>
+        </div>
+
+        <div class="tournament-bracket-panel">
+          <h3>Bracket</h3>
+          <div class="bracket-view" id="bracket-view">
+            <div class="bracket-empty">Bracket appears when tournament starts</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="script.js"></script>
 </body>
 </html>
