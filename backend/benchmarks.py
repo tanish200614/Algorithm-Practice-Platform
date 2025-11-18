@@ -1,7 +1,13 @@
-import subprocess, tempfile, sys, os, json, math
+import json, math
 
 from problems import PROBLEMS
 from ml import clusterer as _clusterer, predict_next
+from sandbox import (
+    cpp_compile_and_run,
+    cpp_compile_to_asm,
+    java_compile_and_run,
+    run_sandboxed,
+)
 
 INPUT_SIZES = [100, 500, 1000, 3000, 7000, 15000]
 
@@ -192,78 +198,118 @@ public class Solution {
 
 # ── Benchmark runners ─────────────────────────────────────────────────────────
 
+def _fill(template: str, user_code: str, n: int) -> str:
+    return template.replace("// USER_CODE", user_code).replace("N_VAL", str(n))
+
+
+def _sandbox_error(res) -> str:
+    """Turn a failed sandbox run into a message worth showing the player."""
+    if res.compile_failed:
+        return f"Compile error: {res.stderr.strip()[:200]}"
+    if res.timed_out:
+        return "Timed out"
+    if res.oom_killed:
+        return "Exceeded the memory limit"
+    return (res.stderr.strip() or "Execution failed")[:200]
+
+
+def _parse_row(res):
+    """Harnesses print one JSON object on the last line of stdout."""
+    out = res.stdout.strip()
+    if not out:
+        return None, _sandbox_error(res)
+    try:
+        return json.loads(out.split("\n")[-1]), None
+    except (ValueError, IndexError):
+        return None, _sandbox_error(res)
+
+
 def run_benchmark_step(user_code: str, language: str, problem_id: str, n: int):
     if language == "python":
         problem = PROBLEMS[problem_id]
         harness = make_python_harness(user_code, problem, n)
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
-            f.write(harness)
-            path = f.name
-        proc = subprocess.run([sys.executable, path], capture_output=True, text=True, timeout=10)
-        out = proc.stdout.strip()
+        res = run_sandboxed("python", {"harness.py": harness}, ["harness.py"])
 
     elif language == "cpp":
-        template = CPP_HARNESSES.get(problem_id, "")
-        full = template.replace("// USER_CODE", user_code).replace("N_VAL", str(n))
-        tmpdir = tempfile.mkdtemp()
-        src = os.path.join(tmpdir, "sol.cpp")
-        binary = os.path.join(tmpdir, "sol")
-        with open(src, "w") as f:
-            f.write(full)
-        cp = subprocess.run(["g++", "-O2", "-std=c++17", "-o", binary, src],
-                            capture_output=True, text=True, timeout=15)
-        if cp.returncode != 0:
-            return None, f"Compile error: {cp.stderr[:200]}"
-        proc = subprocess.run([binary], capture_output=True, text=True, timeout=10)
-        out = proc.stdout.strip()
+        template = CPP_HARNESSES.get(problem_id)
+        if not template:
+            return None, f"No C++ harness for problem '{problem_id}'"
+        res = run_sandboxed(
+            "cpp",
+            {"solution.cpp": _fill(template, user_code, n)},
+            cpp_compile_and_run(),
+        )
 
     elif language == "java":
-        template = JAVA_HARNESSES.get(problem_id, "")
-        full = template.replace("// USER_CODE", user_code).replace("N_VAL", str(n))
-        tmpdir = tempfile.mkdtemp()
-        src = os.path.join(tmpdir, "Solution.java")
-        with open(src, "w") as f:
-            f.write(full)
-        cp = subprocess.run(["javac", src], capture_output=True, text=True, timeout=15)
-        if cp.returncode != 0:
-            return None, f"Compile error: {cp.stderr[:200]}"
-        proc = subprocess.run(["java", "-cp", tmpdir, "Solution"],
-                              capture_output=True, text=True, timeout=10)
-        out = proc.stdout.strip()
+        template = JAVA_HARNESSES.get(problem_id)
+        if not template:
+            return None, f"No Java harness for problem '{problem_id}'"
+        res = run_sandboxed(
+            "java",
+            {"Solution.java": _fill(template, user_code, n)},
+            java_compile_and_run(),
+        )
 
     else:
         return None, "Unknown language"
 
-    if out:
-        row = json.loads(out.split("\n")[-1])
-        return row, None
-    return None, "No output"
+    if not res.ok:
+        return None, _sandbox_error(res)
+    return _parse_row(res)
 
 
 def run_cpp_benchmark_with_opt(code: str, problem_id: str, n: int, opt: str):
+    """Same benchmark at a chosen optimisation level, for the -O0/-O2 compare."""
     template = CPP_HARNESSES.get(problem_id)
     if not template:
         return None
-    full = template.replace("// USER_CODE", code).replace("N_VAL", str(n))
-    tmpdir = tempfile.mkdtemp()
-    src = os.path.join(tmpdir, "sol.cpp")
-    binary = os.path.join(tmpdir, "sol")
-    with open(src, "w") as f:
-        f.write(full)
-    cp = subprocess.run(
-        ["g++", opt, "-std=c++17", "-o", binary, src],
-        capture_output=True, text=True, timeout=15
+    res = run_sandboxed(
+        "cpp",
+        {"solution.cpp": _fill(template, code, n)},
+        cpp_compile_and_run(opt=opt),
     )
-    if cp.returncode != 0:
+    if not res.ok:
         return None
-    proc = subprocess.run([binary], capture_output=True, text=True, timeout=10)
-    out = proc.stdout.strip()
-    if out:
-        try:
-            return json.loads(out.split("\n")[-1])
-        except Exception:
-            return None
-    return None
+    row, _ = _parse_row(res)
+    return row
+
+
+ASM_SCAFFOLD = """\
+#include <iostream>
+#include <vector>
+#include <algorithm>
+#include <unordered_map>
+#include <string>
+using namespace std;
+
+{code}
+
+int main() {{ return 0; }}
+"""
+
+
+def compile_to_assembly(code: str, opt: str = "-O2"):
+    """
+    Compile a C++ solution to annotated assembly inside the sandbox.
+
+    Returns (assembly_text, error). Intel syntax is preferred for readability
+    but is x86-only, so fall back to the toolchain default on other
+    architectures rather than failing outright.
+    """
+    source = code if "int main(" in code else ASM_SCAFFOLD.format(code=code)
+
+    last_error = None
+    for intel in (True, False):
+        res = run_sandboxed(
+            "cpp",
+            {"solution.cpp": source},
+            cpp_compile_to_asm(opt=opt, intel=intel),
+        )
+        if res.ok and res.stdout.strip():
+            return res.stdout, None
+        last_error = _sandbox_error(res)
+
+    return None, last_error
 
 
 # ── Complexity detection ──────────────────────────────────────────────────────
