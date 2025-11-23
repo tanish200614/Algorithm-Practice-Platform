@@ -131,8 +131,8 @@ int main() {
 JAVA_HARNESSES = {
     "two_sum": """
 import java.util.*;
-// USER_CODE
 public class Solution {
+    // USER_CODE
     public static void main(String[] args) {
         Random rng = new Random(42 + N_VAL);
         int n = N_VAL;
@@ -153,8 +153,8 @@ public class Solution {
 """,
     "max_subarray": """
 import java.util.*;
-// USER_CODE
 public class Solution {
+    // USER_CODE
     public static void main(String[] args) {
         Random rng = new Random(42 + N_VAL);
         int n = N_VAL;
@@ -174,8 +174,8 @@ public class Solution {
 """,
     "bubble_sort": """
 import java.util.*;
-// USER_CODE
 public class Solution {
+    // USER_CODE
     public static void main(String[] args) {
         Random rng = new Random(42 + N_VAL);
         int n = N_VAL;
