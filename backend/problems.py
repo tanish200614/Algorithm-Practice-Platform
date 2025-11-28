@@ -1,7 +1,23 @@
 import shutil
 
+from sandbox import docker_available
+
+
 def detect_compiler(name):
     return shutil.which(name) is not None
+
+
+def language_available(lang_id: str) -> bool:
+    """
+    A language is usable if the sandbox can run it. With Docker up that means
+    the image exists; on the host fallback it means the toolchain is installed
+    locally. Checked per request rather than at import, so building the images
+    or starting the daemon takes effect without a backend restart.
+    """
+    compiler = LANGUAGES[lang_id].get("compiler")
+    if compiler is None:
+        return True
+    return docker_available() or detect_compiler(compiler)
 
 PROBLEMS = {
     "two_sum": {
@@ -74,17 +90,17 @@ def validate(result, nums):
 LANGUAGES = {
     "python": {
         "label": "Python 3",
-        "available": True,
         "extension": ".py",
+        "compiler": None,
     },
     "cpp": {
         "label": "C++17",
-        "available": detect_compiler("g++"),
         "extension": ".cpp",
+        "compiler": "g++",
     },
     "java": {
         "label": "Java",
-        "available": detect_compiler("javac"),
         "extension": ".java",
+        "compiler": "javac",
     },
 }

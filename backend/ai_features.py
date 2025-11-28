@@ -15,13 +15,18 @@ def _get_client() -> anthropic.AsyncAnthropic:
 
 
 async def _run_code_async(code: str) -> str:
-    """Run Python code via runner.run_python in a thread executor."""
+    """
+    Run the interviewer's probe script in the sandbox, off the event loop.
+
+    The interviewer writes this code itself, but it is built from the
+    candidate's submission and gets no more trust than any other submission.
+    """
     from runner import run_python
     loop = asyncio.get_event_loop()
-    stdout, stderr, duration_ms, _ = await loop.run_in_executor(None, run_python, code)
-    if stderr:
-        return f"Error: {stderr[:400]}"
-    return stdout.strip() or "OK"
+    result = await loop.run_in_executor(None, run_python, code)
+    if result["stderr"]:
+        return f"Error: {result['stderr'][:400]}"
+    return result["stdout"].strip() or "OK"
 
 
 async def _run_agent(

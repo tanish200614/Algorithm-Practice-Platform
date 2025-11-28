@@ -1,10 +1,11 @@
-import subprocess, tempfile, os, re
+import re
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from problems import PROBLEMS, LANGUAGES, detect_compiler
-from runner import run_python, run_cpp, run_java
-from benchmarks import run_cpp_benchmark_with_opt
+from problems import PROBLEMS, LANGUAGES, language_available
+from runner import run_submission
+from sandbox import sandbox_status
+from benchmarks import compile_to_assembly, run_cpp_benchmark_with_opt
 from ml import elo, solve_times, difficulty
 from auth import hash_password, verify_password, create_token, get_current_user
 from database import create_user, get_user, get_stats, all_stats
@@ -65,23 +66,28 @@ class CodeRequest(BaseModel):
 @router.post("/run")
 def run_code(req: CodeRequest):
     lang = req.language.lower()
+    if lang not in LANGUAGES:
+        raise HTTPException(400, f"Unsupported language: {req.language}")
     try:
-        if lang == "cpp":
-            stdout, stderr, duration, mem = run_cpp(req.code)
-        elif lang == "java":
-            stdout, stderr, duration, mem = run_java(req.code)
-        else:
-            stdout, stderr, duration, mem = run_python(req.code)
+        return run_submission(req.code, lang)
     except Exception as e:
-        return {"stdout": "", "stderr": str(e), "time_ms": 0, "memory_kb": 0}
-    return {"stdout": stdout, "stderr": stderr, "time_ms": duration, "memory_kb": mem}
+        return {"stdout": "", "stderr": f"Execution failed: {e}", "time_ms": 0}
+
+
+@router.get("/sandbox")
+def get_sandbox_status():
+    """How submissions are being isolated right now."""
+    return sandbox_status()
 
 
 # ── Metadata ──────────────────────────────────────────────────────────────────
 
 @router.get("/languages")
 def get_languages():
-    return [{"id": k, "label": v["label"], "available": v["available"]} for k, v in LANGUAGES.items()]
+    return [
+        {"id": k, "label": v["label"], "available": language_available(k)}
+        for k, v in LANGUAGES.items()
+    ]
 
 
 @router.get("/problems")
@@ -133,48 +139,15 @@ class AsmRequest(BaseModel):
 
 @router.post("/asm")
 def get_assembly(req: AsmRequest):
-    if not detect_compiler("g++"):
-        return {"error": "g++ not available on this server"}
+    if not language_available("cpp"):
+        return {"error": "No C++ toolchain available on this server"}
 
-    tmpdir = tempfile.mkdtemp()
-    src = os.path.join(tmpdir, "solution.cpp")
-    asm_path = os.path.join(tmpdir, "solution.s")
+    asm_text, err = compile_to_assembly(req.code)
+    if err:
+        return {"error": err[:500]}
 
-    if "int main(" not in req.code:
-        full_code = f"""
-#include <iostream>
-#include <vector>
-#include <algorithm>
-#include <unordered_map>
-#include <string>
-using namespace std;
-
-{req.code}
-
-int main() {{ return 0; }}
-"""
-    else:
-        full_code = req.code
-
-    with open(src, "w") as f:
-        f.write(full_code)
-
-    asm_compiled = None
-    for extra in [["-masm=intel"], []]:
-        cp = subprocess.run(
-            ["g++", "-S", "-O2", "-std=c++17", "-fverbose-asm"] + extra + [src, "-o", asm_path],
-            capture_output=True, text=True, timeout=15
-        )
-        if cp.returncode == 0:
-            asm_compiled = extra
-            break
-
-    if asm_compiled is None:
-        return {"error": cp.stderr[:500]}
-
-    with open(asm_path) as f:
-        asm_text = f.read()
-
+    # Benchmark the same solution at both optimisation levels so the
+    # assembly is paired with what it actually costs to run.
     o0 = run_cpp_benchmark_with_opt(req.code, req.problem_id, 3000, "-O0")
     o2 = run_cpp_benchmark_with_opt(req.code, req.problem_id, 3000, "-O2")
 
