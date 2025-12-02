@@ -5,7 +5,6 @@ from routes import router as code_router
 from rooms import router as rooms_router
 from matchmaking import router as queue_router
 from tournament import router as tournament_router
-from ai_routes import router as ai_router
 from database import init_db, all_stats
 from ml import elo
 
@@ -32,4 +31,3 @@ app.include_router(code_router)
 app.include_router(rooms_router)
 app.include_router(queue_router)
 app.include_router(tournament_router)
-app.include_router(ai_router)

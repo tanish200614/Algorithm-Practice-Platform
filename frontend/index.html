@@ -56,14 +56,11 @@
           <p>Start a battle, get a 6-digit code, share it with your opponent.</p>
           <div class="problem-select-wrap">
             <label>Choose problem</label>
-            <div class="problem-select-row">
-              <select id="problem-select">
-                <option value="two_sum">Two Sum</option>
-                <option value="max_subarray">Maximum Subarray</option>
-                <option value="bubble_sort">Sort the Array</option>
-              </select>
-              <button class="btn-generate-problem" id="btn-open-generate" title="Generate a custom problem with AI">✦ AI</button>
-            </div>
+            <select id="problem-select">
+              <option value="two_sum">Two Sum</option>
+              <option value="max_subarray">Maximum Subarray</option>
+              <option value="bubble_sort">Sort the Array</option>
+            </select>
           </div>
           <input type="text" id="create-name" placeholder="Your name" maxlength="16" />
           <button class="btn-primary" id="btn-create">Create Room →</button>
@@ -214,7 +211,6 @@
             <div class="race-insights" id="race-insights"></div>
             <div class="winner-actions">
               <button class="btn-primary" id="btn-rematch">Rematch</button>
-              <button class="btn-ghost" id="btn-interview-mode">Interview Me →</button>
               <button class="btn-ghost" id="btn-lobby">Back to Lobby</button>
             </div>
           </div>
@@ -261,50 +257,6 @@
           <label>Stats</label>
           <pre id="solo-stats"></pre>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- GENERATE PROBLEM MODAL -->
-  <div id="generate-modal" class="fullscreen-overlay hidden">
-    <div class="overlay-card generate-card">
-      <div class="generate-header">
-        <span class="generate-tag">✦ AI Problem Generator</span>
-        <button class="btn-overlay-close" id="btn-close-generate">✕</button>
-      </div>
-      <p class="generate-hint">Describe a variant or a completely new problem — the AI will write it, including test cases and a validator.</p>
-      <textarea id="generate-description" placeholder="e.g. Two Sum but the array is sorted and you can't use extra space&#10;e.g. Find the length of the longest palindromic substring&#10;e.g. Given a matrix, return all elements in spiral order" rows="4"></textarea>
-      <button class="btn-primary" id="btn-generate-submit">Generate Problem →</button>
-      <div id="generate-status" class="generate-status hidden"></div>
-      <div id="generate-preview" class="generate-preview hidden">
-        <div class="generate-preview-title" id="generate-preview-title"></div>
-        <div class="generate-preview-desc" id="generate-preview-desc"></div>
-        <div class="generate-preview-actions">
-          <button class="btn-primary" id="btn-use-problem">Use this Problem →</button>
-          <button class="btn-ghost" id="btn-regenerate">Try Again</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- INTERVIEW OVERLAY -->
-  <div id="interview-overlay" class="fullscreen-overlay hidden">
-    <div class="interview-layout">
-      <div class="interview-left">
-        <div class="interview-left-header">
-          <span class="interview-tag">Technical Interview</span>
-          <button class="btn-overlay-close" id="btn-close-interview">✕</button>
-        </div>
-        <div class="interview-problem-title" id="interview-problem-title"></div>
-        <pre class="interview-code" id="interview-code"></pre>
-      </div>
-      <div class="interview-right">
-        <div class="interview-chat" id="interview-chat"></div>
-        <div class="interview-input-row">
-          <textarea id="interview-input" placeholder="Your answer..." rows="2"></textarea>
-          <button class="btn-primary interview-send-btn" id="interview-send">Send</button>
-        </div>
-        <div class="interview-meta" id="interview-meta"></div>
       </div>
     </div>
   </div>

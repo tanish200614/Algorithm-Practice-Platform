@@ -8,12 +8,6 @@ pyjwt==2.12.1
 passlib[bcrypt]==1.7.4
 bcrypt==3.2.2
 
-# Execution metrics
-psutil==7.1.2
-
-# AI interview / problem generation (optional — needs ANTHROPIC_API_KEY)
-anthropic==0.104.1
-
 # Tests
 pytest==8.4.2
 httpx==0.28.1
