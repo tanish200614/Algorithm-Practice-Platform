@@ -1781,3 +1781,38 @@ textarea::placeholder { color: var(--text-muted); }
   color: var(--fg-muted);
   flex-shrink: 0;
 }
+/* ── Additions for the React port ──────────────────────────────────────────── */
+
+/* Surfaced when the backend is running submissions without container
+   isolation, so it is never a silent condition. */
+.sandbox-warning {
+  margin-top: 18px;
+  padding: 10px 14px;
+  border: 1px solid var(--accent2, #ff3c6e);
+  border-radius: 6px;
+  background: rgba(255, 60, 110, 0.08);
+  color: var(--accent2, #ff3c6e);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.result-card-lang {
+  color: var(--accent3, #7a5cff);
+  margin-left: 8px;
+  font-size: 10px;
+}
+
+.result-card-stopped {
+  color: var(--accent2, #ff3c6e);
+}
+
+/* The React tree renders one screen at a time, so the active screen must lay
+   itself out rather than relying on a sibling being hidden. */
+.screen.active {
+  display: block;
+}
+
+.solo-top-bar .lang-selector {
+  display: flex;
+  gap: 6px;
+}
