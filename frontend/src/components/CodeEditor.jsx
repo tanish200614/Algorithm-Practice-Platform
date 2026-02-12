@@ -23,13 +23,15 @@ export default function CodeEditor({ value, onChange, ...props }) {
 
       const apply = (next, caretStart, caretEnd = caretStart) => {
         e.preventDefault();
+        // Write the text and the caret straight to the DOM node, then tell
+        // React. Deferring the caret (to rAF or an effect) loses races against
+        // fast typing: the next keystroke reads a caret that has not been
+        // fixed up yet, so `print(6*7)` comes out as `print(*7)6`. Because the
+        // value React re-renders with is identical to what is already in the
+        // node, React leaves the selection alone.
+        ta.value = next;
+        ta.setSelectionRange(caretStart, caretEnd);
         onChange(next);
-        // The DOM node still holds the old text until React re-renders, so
-        // the caret has to be restored afterwards.
-        requestAnimationFrame(() => {
-          ta.selectionStart = caretStart;
-          ta.selectionEnd = caretEnd;
-        });
       };
 
       if (e.key === "Tab") {
