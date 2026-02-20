@@ -4,14 +4,19 @@
 // empty string, which makes every path same-origin so nginx can proxy it —
 // that way the image works behind any hostname or load balancer without being
 // rebuilt for each environment.
-const RAW = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
+const RAW = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000/api";
 
 export const API = RAW.replace(/\/+$/, "");
 
 export function wsUrl(path, token) {
-  const base = API || window.location.origin;
-  const url = new URL(base.replace(/^http/, "ws"));
-  url.pathname = path;
+  // API may be absolute (dev, pointing at uvicorn) or a same-origin path like
+  // "/api" (the container build). Resolve both to an absolute ws:// URL, and
+  // keep the base's own path — overwriting pathname outright would drop the
+  // "/api" prefix.
+  const absolute = /^https?:/.test(API) ? API : `${window.location.origin}${API}`;
+  const url = new URL(absolute);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  url.pathname = `${url.pathname.replace(/\/+$/, "")}${path}`;
   if (token) url.searchParams.set("token", token);
   return url.toString();
 }
