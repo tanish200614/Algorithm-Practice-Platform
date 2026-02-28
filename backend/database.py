@@ -1,9 +1,12 @@
 import sqlite3, os
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "algobattle.db")
+# Overridable so a deployment can point the database at a mounted volume;
+# otherwise it would live in the image layer and be lost on every redeploy.
+DB_PATH = os.environ.get("DB_PATH") or os.path.join(os.path.dirname(__file__), "algobattle.db")
 
 
 def _conn():
+    os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
     c = sqlite3.connect(DB_PATH)
     c.row_factory = sqlite3.Row
     return c

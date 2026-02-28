@@ -1,0 +1,45 @@
+# Local/single-host stack: nginx serves the SPA and proxies /api to the API,
+# which launches sandbox containers as siblings on the host daemon.
+#
+# Build the sandbox images first — the API refuses to run submissions without
+# them, because SANDBOX_MODE=docker forbids falling back to the host:
+#
+#   ./sandbox/build.sh && docker compose up --build
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: deploy/backend.Dockerfile
+    environment:
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY — the app will not run on a default signing key}
+      SANDBOX_MODE: docker
+      SANDBOX_TAG: ${SANDBOX_TAG:-latest}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080}
+      DB_PATH: /data/algobattle.db
+    volumes:
+      # How the sandbox works: the API talks to the host's Docker daemon and
+      # starts each submission as a sibling container. This socket is
+      # root-equivalent on the host, so nothing else should share this
+      # instance — see deploy/README.md.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # SQLite lives on a volume so ratings survive a redeploy.
+      - algobattle-data:/data
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: deploy/frontend.Dockerfile
+    environment:
+      BACKEND_HOST: backend
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  algobattle-data:

@@ -5,9 +5,16 @@ from passlib.context import CryptContext
 from fastapi import HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "algobattle-dev-secret-change-in-prod")
+DEV_SECRET = "algobattle-dev-secret-change-in-prod"
+
+SECRET_KEY = os.environ.get("SECRET_KEY") or DEV_SECRET
 ALGORITHM  = "HS256"
 EXPIRE_DAYS = 30
+
+
+def using_dev_secret() -> bool:
+    """True when tokens are signed with the well-known development key."""
+    return SECRET_KEY == DEV_SECRET
 
 _pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 _bearer = HTTPBearer(auto_error=False)

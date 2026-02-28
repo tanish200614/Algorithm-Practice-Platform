@@ -8,6 +8,7 @@ from routes import router as code_router
 from rooms import router as rooms_router
 from matchmaking import router as queue_router
 from tournament import router as tournament_router
+from auth import using_dev_secret
 from database import init_db, all_stats
 from ml import elo
 from sandbox import sandbox_status
@@ -35,6 +36,12 @@ async def lifespan(_app: FastAPI):
     for row in all_stats():
         elo._skills[row["username"]] = row["skill"]
         elo._solve_counts[row["username"]] = row["solves"]
+
+    if using_dev_secret():
+        print(
+            "[auth] WARNING: signing tokens with the built-in development key. "
+            "Set SECRET_KEY — anyone who knows the default can mint valid tokens."
+        )
 
     status = sandbox_status()
     if not status["isolated"]:
