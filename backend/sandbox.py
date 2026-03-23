@@ -27,6 +27,10 @@ from dataclasses import dataclass, replace
 # rather than "the program itself failed".
 COMPILE_ERROR_EXIT = 91
 
+# Must match the uid the sandbox images create. Deliberately high: the
+# eclipse-temurin base already owns 1000.
+SANDBOX_UID = 10001
+
 SANDBOX_TAG = os.environ.get("SANDBOX_TAG", "latest")
 
 IMAGES = {
@@ -174,7 +178,7 @@ def _docker_create_argv(image: str, limits: Limits, name: str, command: list) ->
         "--pids-limit", str(limits.pids),
         "--cap-drop", "ALL",
         "--security-opt", "no-new-privileges",
-        "--user", "1000:1000",
+        "--user", f"{SANDBOX_UID}:{SANDBOX_UID}",
         "--workdir", "/work",
         # Compilers and the JVM need scratch space; keep it small and in RAM.
         "--tmpfs", "/tmp:rw,size=64m,mode=1777,exec",
@@ -413,5 +417,5 @@ def java_compile_and_run(class_name: str = "Solution") -> list:
     return [
         f'javac -d /tmp {class_name}.java 2>/tmp/cc.err '
         f'|| {{ cat /tmp/cc.err >&2; exit {COMPILE_ERROR_EXIT}; }}; '
-        f'exec java -cp /tmp {class_name}'
+        f'exec java -XX:-UsePerfData -cp /tmp {class_name}'
     ]

@@ -4,12 +4,15 @@
 # too — a hostile #include or a compile-time bomb should not reach the host.
 FROM gcc:13-bookworm
 
-RUN useradd --uid 1000 --create-home --shell /usr/sbin/nologin sandbox
+# A high uid so it cannot collide with a user the base image already
+# ships — the eclipse-temurin base owns 1000 as "ubuntu", and useradd
+# fails the build on that collision.
+RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin sandbox
 
 RUN mkdir -p /work && chmod 1777 /work
 
 WORKDIR /work
-USER 1000:1000
+USER 10001:10001
 
 ENV HOME=/tmp
 
