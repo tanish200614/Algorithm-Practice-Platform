@@ -48,6 +48,17 @@ CPP_HARNESSES = {
 #include <chrono>
 #include <algorithm>
 #include <cstdlib>
+// The containers a solution is likely to reach for. libc++ pulls several of
+// these in transitively, so a missing include only fails on the Linux
+// (libstdc++) sandbox and not on a macOS dev machine.
+#include <unordered_map>
+#include <unordered_set>
+#include <map>
+#include <set>
+#include <queue>
+#include <stack>
+#include <string>
+#include <numeric>
 using namespace std;
 // USER_CODE
 int main() {
@@ -75,6 +86,17 @@ int main() {
 #include <chrono>
 #include <algorithm>
 #include <cstdlib>
+// The containers a solution is likely to reach for. libc++ pulls several of
+// these in transitively, so a missing include only fails on the Linux
+// (libstdc++) sandbox and not on a macOS dev machine.
+#include <unordered_map>
+#include <unordered_set>
+#include <map>
+#include <set>
+#include <queue>
+#include <stack>
+#include <string>
+#include <numeric>
 using namespace std;
 // USER_CODE
 int main() {
@@ -102,6 +124,17 @@ int main() {
 #include <chrono>
 #include <algorithm>
 #include <cstdlib>
+// The containers a solution is likely to reach for. libc++ pulls several of
+// these in transitively, so a missing include only fails on the Linux
+// (libstdc++) sandbox and not on a macOS dev machine.
+#include <unordered_map>
+#include <unordered_set>
+#include <map>
+#include <set>
+#include <queue>
+#include <stack>
+#include <string>
+#include <numeric>
 using namespace std;
 // USER_CODE
 int main() {
