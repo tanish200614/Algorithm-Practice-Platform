@@ -1,0 +1,129 @@
+"""
+Sandbox behaviour.
+
+The isolation guarantees (no network, unprivileged uid, memory ceiling) can
+only be asserted against real containers, so those tests skip when the images
+are not built. The rest — limit plumbing, compile-error detection, the probe
+cache — run anywhere.
+"""
+
+import dataclasses
+
+import pytest
+
+import sandbox
+from sandbox import DEFAULT_LIMITS, run_sandboxed
+
+requires_docker = pytest.mark.skipif(
+    not sandbox.docker_available(),
+    reason="sandbox images not built; run sandbox/build.sh",
+)
+
+
+class TestProbeCache:
+    def test_unprobed_cache_is_not_mistaken_for_a_result(self, monkeypatch):
+        """time.monotonic() can start near zero, so a 0.0 timestamp sentinel
+        would read as a fresh 'unavailable' result and silently skip the
+        daemon check for the process's first 30 seconds."""
+        calls = []
+
+        def fake_probe():
+            calls.append(1)
+            return True, "stub"
+
+        monkeypatch.setattr(sandbox, "_probe_cache", None)
+        monkeypatch.setattr(sandbox, "_probe_docker", fake_probe)
+        monkeypatch.setattr(sandbox.time, "monotonic", lambda: 0.01)
+
+        assert sandbox.docker_available() is True
+        assert len(calls) == 1
+
+    def test_result_is_cached_within_the_ttl(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(sandbox, "_probe_cache", None)
+        monkeypatch.setattr(sandbox, "_probe_docker", lambda: (calls.append(1), (True, "stub"))[1])
+        monkeypatch.setattr(sandbox.time, "monotonic", lambda: 100.0)
+
+        sandbox.docker_available()
+        sandbox.docker_available()
+        assert len(calls) == 1
+
+
+class TestExecution:
+    def test_runs_python_and_captures_stdout(self):
+        res = run_sandboxed("python", {"h.py": "print(6 * 7)"}, ["h.py"])
+        assert res.stdout.strip() == "42"
+        assert res.ok
+
+    def test_reports_a_traceback_without_crashing(self):
+        res = run_sandboxed("python", {"h.py": "raise ValueError('boom')"}, ["h.py"])
+        assert not res.ok
+        assert "boom" in res.stderr
+
+    def test_wall_clock_limit_kills_a_spinning_submission(self):
+        limits = dataclasses.replace(DEFAULT_LIMITS, wall_clock_s=3.0)
+        res = run_sandboxed("python", {"h.py": "while True: pass"}, ["h.py"], limits=limits)
+        assert res.timed_out
+        assert res.exit_code == 124
+
+    def test_unknown_language_is_rejected(self):
+        assert run_sandboxed("brainfuck", {}, []).exit_code == -1
+
+    def test_compile_failure_is_distinct_from_a_runtime_failure(self):
+        res = run_sandboxed(
+            "cpp",
+            {"solution.cpp": "int main() { this is not valid c++ }"},
+            sandbox.cpp_compile_and_run(),
+        )
+        assert res.compile_failed
+        assert "error" in res.stderr.lower()
+
+    def test_a_compiling_program_is_not_flagged_as_a_compile_error(self):
+        res = run_sandboxed(
+            "cpp",
+            {"solution.cpp": "#include <cstdlib>\nint main() { return 3; }"},
+            sandbox.cpp_compile_and_run(),
+        )
+        assert not res.compile_failed
+        assert res.exit_code == 3
+
+
+@requires_docker
+class TestIsolation:
+    """The guarantees the platform actually rests on."""
+
+    def test_submissions_cannot_reach_the_network(self):
+        code = (
+            "import socket\n"
+            "socket.setdefaulttimeout(3)\n"
+            "try:\n"
+            "    socket.create_connection(('1.1.1.1', 53))\n"
+            "    print('REACHABLE')\n"
+            "except OSError:\n"
+            "    print('blocked')\n"
+        )
+        res = run_sandboxed("python", {"h.py": code}, ["h.py"])
+        assert res.stdout.strip() == "blocked"
+
+    def test_submissions_do_not_run_as_root(self):
+        res = run_sandboxed("python", {"h.py": "import os; print(os.getuid())"}, ["h.py"])
+        assert res.stdout.strip() == str(sandbox.SANDBOX_UID)
+
+    def test_exceeding_the_memory_limit_is_killed(self):
+        limits = dataclasses.replace(DEFAULT_LIMITS, memory_mb=128)
+        code = "x = bytearray(400 * 1024 * 1024)\nprint('allocated')"
+        res = run_sandboxed("python", {"h.py": code}, ["h.py"], limits=limits)
+        assert res.oom_killed
+        assert "allocated" not in res.stdout
+
+    def test_a_fork_bomb_is_contained(self):
+        limits = dataclasses.replace(DEFAULT_LIMITS, pids=32, wall_clock_s=10.0)
+        res = run_sandboxed(
+            "python", {"h.py": "import os\nwhile True: os.fork()"}, ["h.py"], limits=limits
+        )
+        assert not res.ok
+
+    def test_the_host_filesystem_is_not_visible(self):
+        code = "import os; print(os.path.exists('/app/main.py'), os.path.exists('/etc/shadow'))"
+        res = run_sandboxed("python", {"h.py": code}, ["h.py"])
+        assert res.stdout.strip().startswith("False")
