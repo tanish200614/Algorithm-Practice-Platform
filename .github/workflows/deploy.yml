@@ -1,0 +1,117 @@
+name: Deploy
+
+# Pushes images to ECR and rolls the ECS services. Triggered by a release tag
+# rather than every push to main, so a merge does not deploy by itself.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to deploy
+        required: false
+        default: main
+
+concurrency:
+  # Never let two deploys race to update the same service.
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  ECS_CLUSTER: algobattle
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+
+permissions:
+  # OIDC federation instead of long-lived access keys in repo secrets.
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: Build, push, and roll out
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Tag with the commit SHA as well as latest: "latest" is what the task
+      # definition tracks, and the SHA is what makes a rollback a one-liner.
+      - name: Push the API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/backend.Dockerfile
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/algobattle-backend:${{ github.sha }}
+            ${{ env.ECR_REGISTRY }}/algobattle-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Push the web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/frontend.Dockerfile
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/algobattle-frontend:${{ github.sha }}
+            ${{ env.ECR_REGISTRY }}/algobattle-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # The sandbox images run on the instance, not in ECS. They change rarely,
+      # so they are pushed here and pulled by the instance's boot script.
+      - name: Push the sandbox images
+        run: |
+          for lang in python cpp java; do
+            repo="${ECR_REGISTRY}/algobattle-sandbox-${lang}"
+            docker build -f "sandbox/${lang}.Dockerfile" \
+              -t "${repo}:${{ github.sha }}" -t "${repo}:latest" sandbox/
+            docker push "${repo}:${{ github.sha }}"
+            docker push "${repo}:latest"
+          done
+
+      - name: Roll the services
+        run: |
+          for service in algobattle-backend algobattle-frontend; do
+            aws ecs update-service \
+              --cluster "$ECS_CLUSTER" \
+              --service "$service" \
+              --force-new-deployment \
+              --no-cli-pager
+          done
+
+      # Without this the job goes green the moment the API call returns, even
+      # if every new task then crash-loops and ECS rolls back.
+      - name: Wait for the rollout to stabilise
+        run: |
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services algobattle-backend algobattle-frontend
+
+      - name: Verify the deployment is serving
+        run: |
+          for attempt in $(seq 1 10); do
+            if curl -fsS "https://${{ secrets.PUBLIC_HOSTNAME }}/health" | tee /dev/stderr | grep -q '"status":"ok"'; then
+              echo "healthy"
+              exit 0
+            fi
+            echo "attempt $attempt failed; retrying"
+            sleep 15
+          done
+          echo "the deployment never reported healthy"
+          exit 1
