@@ -1,0 +1,517 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >-
+  AlgoBattle on ECS behind an Application Load Balancer.
+
+  Two design constraints drive the shape of this stack:
+
+  1. The API executes untrusted submissions by starting sibling containers on
+     the host's Docker daemon, which requires mounting /var/run/docker.sock.
+     Fargate does not expose a daemon socket, so the API runs on the EC2
+     launch type. That socket is root-equivalent on the instance, so the
+     container instances exist only to run this workload.
+
+  2. Battle rooms, the matchmaking queue, and tournament brackets are held in
+     the API process's memory. Two players routed to different tasks would
+     never see each other, so the API service is pinned to one task. Moving
+     that state to ElastiCache is the prerequisite for raising it — see
+     deploy/README.md.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC to deploy into.
+
+  PublicSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: At least two subnets in different AZs, for the load balancer.
+
+  InstanceType:
+    Type: String
+    Default: t3.medium
+    Description: >-
+      Sized for concurrent sandbox containers rather than the API itself; each
+      submission may take up to 768 MB.
+
+  SandboxImageTag:
+    Type: String
+    Default: latest
+    Description: Tag of the sandbox images the instance pre-pulls at boot.
+
+  CertificateArn:
+    Type: String
+    Default: ""
+    Description: >-
+      ACM certificate for HTTPS. Leave empty to serve plain HTTP — acceptable
+      for a demo, not for anything handling real passwords.
+
+Conditions:
+  HasCertificate: !Not [!Equals [!Ref CertificateArn, ""]]
+  NoCertificate: !Equals [!Ref CertificateArn, ""]
+
+Resources:
+  # ── Registries ──────────────────────────────────────────────────────────────
+
+  BackendRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: algobattle-backend
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [{
+              "rulePriority": 1,
+              "description": "Keep the 10 most recent images",
+              "selection": {
+                "tagStatus": "any",
+                "countType": "imageCountMoreThan",
+                "countNumber": 10
+              },
+              "action": { "type": "expire" }
+            }]
+          }
+
+  FrontendRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: algobattle-frontend
+      ImageScanningConfiguration:
+        ScanOnPush: true
+
+  # The instance pulls these at boot; the deploy workflow publishes them.
+  SandboxPythonRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: algobattle-sandbox-python
+      ImageScanningConfiguration:
+        ScanOnPush: true
+
+  SandboxCppRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: algobattle-sandbox-cpp
+      ImageScanningConfiguration:
+        ScanOnPush: true
+
+  SandboxJavaRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: algobattle-sandbox-java
+      ImageScanningConfiguration:
+        ScanOnPush: true
+
+  # ── Networking ──────────────────────────────────────────────────────────────
+
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Public ingress to the load balancer
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: HTTP
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: HTTPS
+
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: >-
+        Container instances. Reachable only from the load balancer. No SSH
+        ingress; use SSM Session Manager instead of opening port 22.
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          # Dynamic host ports, since two tasks of the same service must be
+          # able to share an instance during a rolling deploy.
+          FromPort: 32768
+          ToPort: 65535
+          SourceSecurityGroupId: !Ref LoadBalancerSecurityGroup
+          Description: Load balancer to container ports
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: application
+      Scheme: internet-facing
+      Subnets: !Ref PublicSubnetIds
+      SecurityGroups: [!Ref LoadBalancerSecurityGroup]
+      LoadBalancerAttributes:
+        # A benchmark run compiles and executes a submission at six input
+        # sizes; the 60s default would cut it off mid-race.
+        - Key: idle_timeout.timeout_seconds
+          Value: "300"
+
+  FrontendTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref VpcId
+      Port: 80
+      Protocol: HTTP
+      TargetType: instance
+      HealthCheckPath: /
+      HealthCheckPort: traffic-port
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: "20"
+
+  BackendTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref VpcId
+      Port: 8000
+      Protocol: HTTP
+      TargetType: instance
+      HealthCheckPath: /health
+      HealthCheckPort: traffic-port
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      TargetGroupAttributes:
+        # A WebSocket carries a whole battle; draining rather than cutting it
+        # lets an in-flight match finish across a deploy.
+        - Key: deregistration_delay.timeout_seconds
+          Value: "120"
+        # Both players in a room must reach the same task, because the room
+        # only exists in that task's memory.
+        - Key: stickiness.enabled
+          Value: "true"
+        - Key: stickiness.type
+          Value: lb_cookie
+
+  HttpListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - !If
+          - HasCertificate
+          # With a certificate present, plain HTTP only exists to redirect.
+          - Type: redirect
+            RedirectConfig:
+              Protocol: HTTPS
+              Port: "443"
+              StatusCode: HTTP_301
+          - Type: forward
+            TargetGroupArn: !Ref FrontendTargetGroup
+
+  HttpsListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: HasCertificate
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref FrontendTargetGroup
+
+  # /api and /health go to the API; everything else is the SPA.
+  ApiRuleHttp:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Condition: HasCertificate
+    Properties:
+      ListenerArn: !Ref HttpsListener
+      Priority: 10
+      Conditions:
+        - Field: path-pattern
+          Values: ["/api/*", "/health"]
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref BackendTargetGroup
+
+  # Only when there is no certificate; otherwise the HTTP listener is a pure
+  # redirect and the API rule belongs on the HTTPS listener above.
+  ApiRulePlain:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Condition: NoCertificate
+    Properties:
+      ListenerArn: !Ref HttpListener
+      Priority: 10
+      Conditions:
+        - Field: path-pattern
+          Values: ["/api/*", "/health"]
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref BackendTargetGroup
+
+  # ── Compute ─────────────────────────────────────────────────────────────────
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+        # Shell access via SSM, so the security group never needs port 22 open.
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref InstanceRole]
+
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: read-signing-key
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref JwtSecret
+
+  JwtSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: algobattle/jwt-signing-key
+      Description: Signing key for API tokens.
+      GenerateSecretString:
+        PasswordLength: 48
+        ExcludePunctuation: true
+
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: algobattle
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        InstanceType: !Ref InstanceType
+        ImageId: "{{resolve:ssm:/aws/service/ecs/optimized-ami/amazon-linux-2023/recommended/image_id}}"
+        IamInstanceProfile:
+          Arn: !GetAtt InstanceProfile.Arn
+        SecurityGroupIds: [!Ref InstanceSecurityGroup]
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              # The C++ sandbox image alone is ~2GB.
+              VolumeSize: 60
+              VolumeType: gp3
+              Encrypted: true
+        MetadataOptions:
+          # IMDSv2 only, so a request-forgery bug in a container cannot read
+          # instance credentials.
+          HttpTokens: required
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -euo pipefail
+            echo "ECS_CLUSTER=${Cluster}" >> /etc/ecs/ecs.config
+
+            mkdir -p /opt/algobattle/data
+
+            # Pre-pull the sandbox images. Without this the first submission
+            # after a scale-out pays a multi-minute image pull inside a
+            # request, which the client sees as a timeout.
+            registry="${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com"
+            aws ecr get-login-password --region ${AWS::Region} \
+              | docker login --username AWS --password-stdin "$registry"
+            for lang in python cpp java; do
+              docker pull "$registry/algobattle-sandbox-$lang:${SandboxImageTag}"
+              docker tag "$registry/algobattle-sandbox-$lang:${SandboxImageTag}" \
+                "algobattle-sandbox-$lang:latest"
+            done
+
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier: !Ref PublicSubnetIds
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      MinSize: "1"
+      MaxSize: "2"
+      DesiredCapacity: "1"
+      HealthCheckType: EC2
+      HealthCheckGracePeriod: 300
+      Tags:
+        - Key: Name
+          Value: algobattle-container-instance
+          PropagateAtLaunch: true
+
+  # ── Logs ────────────────────────────────────────────────────────────────────
+
+  BackendLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/algobattle-backend
+      RetentionInDays: 14
+
+  FrontendLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/algobattle-frontend
+      RetentionInDays: 14
+
+  # ── Services ────────────────────────────────────────────────────────────────
+
+  BackendTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: algobattle-backend
+      RequiresCompatibilities: [EC2]
+      NetworkMode: bridge
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      Volumes:
+        - Name: docker-socket
+          Host: { SourcePath: /var/run/docker.sock }
+        - Name: data
+          Host: { SourcePath: /opt/algobattle/data }
+      ContainerDefinitions:
+        - Name: backend
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/algobattle-backend:latest"
+          Cpu: 512
+          Memory: 1024
+          Essential: true
+          PortMappings:
+            - ContainerPort: 8000
+              # 0 means a dynamic host port, so a new task can start alongside
+              # the old one during a rolling deploy.
+              HostPort: 0
+          MountPoints:
+            - SourceVolume: docker-socket
+              ContainerPath: /var/run/docker.sock
+            - SourceVolume: data
+              ContainerPath: /data
+          Environment:
+            - Name: SANDBOX_MODE
+              # Fail the request rather than silently running a submission
+              # unisolated on the instance.
+              Value: docker
+            - Name: DB_PATH
+              Value: /data/algobattle.db
+            - Name: ALLOWED_ORIGINS
+              Value: ""
+          Secrets:
+            - Name: SECRET_KEY
+              ValueFrom: !Ref JwtSecret
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref BackendLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  FrontendTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: algobattle-frontend
+      RequiresCompatibilities: [EC2]
+      NetworkMode: bridge
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: frontend
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/algobattle-frontend:latest"
+          Cpu: 256
+          Memory: 256
+          Essential: true
+          PortMappings:
+            - ContainerPort: 80
+              HostPort: 0
+          Environment:
+            # nginx proxies /api to the API through the load balancer, which
+            # keeps it out of the business of discovering task IPs.
+            - Name: BACKEND_HOST
+              Value: !GetAtt LoadBalancer.DNSName
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref FrontendLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  BackendService:
+    Type: AWS::ECS::Service
+    DependsOn: HttpListener
+    Properties:
+      ServiceName: algobattle-backend
+      Cluster: !Ref Cluster
+      TaskDefinition: !Ref BackendTaskDefinition
+      LaunchType: EC2
+      # Pinned to one task: rooms, the matchmaking queue, and brackets live in
+      # this process's memory, so a second task would host players who cannot
+      # see each other. See the note at the top of this template.
+      DesiredCount: 1
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 200
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      HealthCheckGracePeriodSeconds: 60
+      LoadBalancers:
+        - ContainerName: backend
+          ContainerPort: 8000
+          TargetGroupArn: !Ref BackendTargetGroup
+
+  FrontendService:
+    Type: AWS::ECS::Service
+    DependsOn: HttpListener
+    Properties:
+      ServiceName: algobattle-frontend
+      Cluster: !Ref Cluster
+      TaskDefinition: !Ref FrontendTaskDefinition
+      LaunchType: EC2
+      DesiredCount: 1
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      HealthCheckGracePeriodSeconds: 30
+      LoadBalancers:
+        - ContainerName: frontend
+          ContainerPort: 80
+          TargetGroupArn: !Ref FrontendTargetGroup
+
+Outputs:
+  PublicUrl:
+    Description: Where the platform is reachable.
+    Value: !Sub
+      - "${Scheme}://${Dns}"
+      - Scheme: !If [HasCertificate, https, http]
+        Dns: !GetAtt LoadBalancer.DNSName
+
+  BackendRepositoryUri:
+    Value: !GetAtt BackendRepository.RepositoryUri
+
+  FrontendRepositoryUri:
+    Value: !GetAtt FrontendRepository.RepositoryUri
