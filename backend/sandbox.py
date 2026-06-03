@@ -96,66 +96,95 @@ _PROBE_TTL_S = 30.0
 
 
 def _probe_docker() -> tuple:
+    """Returns (detail, set of languages whose sandbox image is present)."""
     if not shutil.which("docker"):
-        return False, "docker CLI not found on PATH"
+        return "docker CLI not found on PATH", set()
     try:
         info = subprocess.run(
             ["docker", "info", "--format", "{{.ServerVersion}}"],
             capture_output=True, text=True, timeout=10,
         )
     except (subprocess.TimeoutExpired, OSError) as e:
-        return False, f"docker info failed: {e}"
+        return f"docker info failed: {e}", set()
     if info.returncode != 0:
-        return False, "Docker daemon is not running"
+        return "Docker daemon is not running", set()
 
-    missing = []
+    ready, missing = set(), []
     for lang, image in IMAGES.items():
         probe = subprocess.run(
             ["docker", "image", "inspect", image],
             capture_output=True, text=True, timeout=15,
         )
-        if probe.returncode != 0:
+        if probe.returncode == 0:
+            ready.add(lang)
+        else:
             missing.append(image)
+
+    detail = f"docker {info.stdout.strip()}"
     if missing:
-        return False, f"sandbox images not built: {', '.join(missing)} (run sandbox/build.sh)"
-    return True, f"docker {info.stdout.strip()}"
+        detail += f"; images not built: {', '.join(missing)} (run sandbox/build.sh)"
+    return detail, ready
 
 
-def docker_available() -> bool:
+def docker_available(language: str = None) -> bool:
+    """
+    Whether the sandbox can isolate `language` (or anything, if None).
+
+    Availability is per-language on purpose. Treating a single missing image as
+    "Docker is unavailable" would drop *every* language to unisolated host
+    execution — including the ones whose image is sitting right there — which
+    is the wrong direction to fail in for untrusted code.
+    """
     global _probe_cache
-    if _probe_cache is not None:
-        checked_at, available, _ = _probe_cache
-        if time.monotonic() - checked_at < _PROBE_TTL_S:
-            return available
-    available, detail = _probe_docker()
-    _probe_cache = (time.monotonic(), available, detail)
-    return available
+    if _probe_cache is None or time.monotonic() - _probe_cache[0] >= _PROBE_TTL_S:
+        detail, ready = _probe_docker()
+        _probe_cache = (time.monotonic(), ready, detail)
+
+    _, ready, _ = _probe_cache
+    return language in ready if language else bool(ready)
 
 
 def _probe_detail() -> str:
     return _probe_cache[2] if _probe_cache else ""
 
 
+def _ready_languages() -> set:
+    docker_available()
+    return _probe_cache[1] if _probe_cache else set()
+
+
 def sandbox_status() -> dict:
-    available = docker_available()
+    ready = _ready_languages()
     detail = _probe_detail()
-    if available:
+
+    if len(ready) == len(IMAGES):
         mode = "docker"
+    elif ready:
+        mode = "partial"
     elif SANDBOX_MODE == "docker":
         mode = "unavailable"
     else:
         mode = "host-rlimit"
+
+    unisolated = [lang for lang in IMAGES if lang not in ready]
     caveats = []
-    if mode == "host-rlimit":
-        caveats.append("no filesystem or network isolation — development only")
+    if unisolated and SANDBOX_MODE != "docker":
+        caveats.append(
+            f"{', '.join(unisolated)} run on the host without filesystem or "
+            f"network isolation — development only"
+        )
         if _IS_DARWIN:
             caveats.append("memory is not capped on macOS (RLIMIT_AS is unusable here)")
+
     return {
         "mode": mode,
-        "isolated": mode == "docker",
+        # Only true when every language the platform offers is isolated; a
+        # partially built set is not something to report as safe.
+        "isolated": len(ready) == len(IMAGES),
         "detail": detail,
         "caveats": caveats,
-        "images": IMAGES if mode == "docker" else {},
+        "languages": {lang: (lang in ready) for lang in IMAGES},
+        "images": {lang: IMAGES[lang] for lang in ready},
     }
 
 
@@ -374,7 +403,7 @@ def run_sandboxed(language: str, files: dict, command: list,
 
     limits = limits or LANGUAGE_LIMITS.get(language, DEFAULT_LIMITS)
 
-    if docker_available():
+    if docker_available(language):
         return _run_docker(language, files, command, limits)
 
     if SANDBOX_MODE == "docker":

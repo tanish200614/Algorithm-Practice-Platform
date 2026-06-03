@@ -17,7 +17,7 @@ def language_available(lang_id: str) -> bool:
     compiler = LANGUAGES[lang_id].get("compiler")
     if compiler is None:
         return True
-    return docker_available() or detect_compiler(compiler)
+    return docker_available(lang_id) or detect_compiler(compiler)
 
 PROBLEMS = {
     "two_sum": {

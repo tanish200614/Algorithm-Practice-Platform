@@ -15,8 +15,8 @@ import sandbox
 from sandbox import DEFAULT_LIMITS, run_sandboxed
 
 requires_docker = pytest.mark.skipif(
-    not sandbox.docker_available(),
-    reason="sandbox images not built; run sandbox/build.sh",
+    not sandbox.docker_available("python"),
+    reason="python sandbox image not built; run sandbox/build.sh",
 )
 
 
@@ -29,24 +29,44 @@ class TestProbeCache:
 
         def fake_probe():
             calls.append(1)
-            return True, "stub"
+            return "stub", {"python"}
 
         monkeypatch.setattr(sandbox, "_probe_cache", None)
         monkeypatch.setattr(sandbox, "_probe_docker", fake_probe)
         monkeypatch.setattr(sandbox.time, "monotonic", lambda: 0.01)
 
-        assert sandbox.docker_available() is True
+        assert sandbox.docker_available("python") is True
         assert len(calls) == 1
 
     def test_result_is_cached_within_the_ttl(self, monkeypatch):
         calls = []
         monkeypatch.setattr(sandbox, "_probe_cache", None)
-        monkeypatch.setattr(sandbox, "_probe_docker", lambda: (calls.append(1), (True, "stub"))[1])
+        monkeypatch.setattr(
+            sandbox, "_probe_docker", lambda: (calls.append(1), ("stub", {"python"}))[1]
+        )
         monkeypatch.setattr(sandbox.time, "monotonic", lambda: 100.0)
 
         sandbox.docker_available()
         sandbox.docker_available()
         assert len(calls) == 1
+
+
+    def test_one_missing_image_does_not_disarm_the_others(self, monkeypatch):
+        """A partially built image set used to drop every language to host
+        execution, including the ones whose image was present."""
+        monkeypatch.setattr(sandbox, "_probe_cache", None)
+        monkeypatch.setattr(sandbox, "_probe_docker", lambda: ("stub", {"python", "cpp"}))
+        monkeypatch.setattr(sandbox.time, "monotonic", lambda: 100.0)
+
+        assert sandbox.docker_available("python") is True
+        assert sandbox.docker_available("cpp") is True
+        assert sandbox.docker_available("java") is False
+
+        status = sandbox.sandbox_status()
+        assert status["mode"] == "partial"
+        # Not every language is isolated, so this must not read as safe.
+        assert status["isolated"] is False
+        assert status["languages"] == {"python": True, "cpp": True, "java": False}
 
 
 class TestExecution:
