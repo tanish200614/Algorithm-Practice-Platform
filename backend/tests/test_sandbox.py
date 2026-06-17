@@ -81,8 +81,22 @@ class TestExecution:
         assert "boom" in res.stderr
 
     def test_wall_clock_limit_kills_a_spinning_submission(self):
+        """A busy loop burns CPU as fast as wall time. If the CPU rlimit had no
+        headroom over the wall-clock budget the two would fire together, and a
+        spinning submission would be reported as an unexplained kill rather
+        than a timeout — which is what happened on Linux."""
         limits = dataclasses.replace(DEFAULT_LIMITS, wall_clock_s=3.0)
         res = run_sandboxed("python", {"h.py": "while True: pass"}, ["h.py"], limits=limits)
+        assert res.timed_out
+        assert res.exit_code == 124
+
+    def test_a_sleeping_submission_also_times_out(self):
+        """Sleeping burns no CPU, so this can only be caught by the wall
+        clock — it proves the timeout is not relying on the CPU rlimit."""
+        limits = dataclasses.replace(DEFAULT_LIMITS, wall_clock_s=3.0)
+        res = run_sandboxed(
+            "python", {"h.py": "import time; time.sleep(60)"}, ["h.py"], limits=limits
+        )
         assert res.timed_out
         assert res.exit_code == 124
 

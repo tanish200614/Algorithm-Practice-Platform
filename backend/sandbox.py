@@ -31,6 +31,10 @@ COMPILE_ERROR_EXIT = 91
 # eclipse-temurin base already owns 1000.
 SANDBOX_UID = 10001
 
+# Seconds of CPU time granted beyond the wall-clock budget on the host
+# fallback, so the wall clock is what actually decides a timeout.
+CPU_LIMIT_HEADROOM_S = 5
+
 SANDBOX_TAG = os.environ.get("SANDBOX_TAG", "latest")
 
 IMAGES = {
@@ -295,7 +299,13 @@ _IS_DARWIN = platform.system() == "Darwin"
 def _rlimit_preexec(limits: Limits, language: str):
     """Applied in the child between fork and exec."""
     def apply():
-        cpu_s = max(1, int(limits.wall_clock_s))
+        # RLIMIT_CPU is a backstop, not the timeout. Set to the wall-clock
+        # budget it becomes a coin flip for anything CPU-bound: a busy loop
+        # burns CPU as fast as wall time, so the two fire together and
+        # whichever wins decides whether the run is reported as a timeout or
+        # as an unexplained kill. Headroom makes the wall clock authoritative
+        # and leaves this to catch only the pathological cases.
+        cpu_s = max(1, int(limits.wall_clock_s) + CPU_LIMIT_HEADROOM_S)
         resource.setrlimit(resource.RLIMIT_CPU, (cpu_s, cpu_s))
         resource.setrlimit(
             resource.RLIMIT_FSIZE, (limits.output_bytes * 4, limits.output_bytes * 4)
@@ -312,10 +322,13 @@ def _rlimit_preexec(limits: Limits, language: str):
             addr = limits.memory_mb * 1024 * 1024
             resource.setrlimit(resource.RLIMIT_AS, (addr, addr))
 
-        # macOS reports RLIMIT_NPROC per-user, so lowering it here would
-        # throttle the developer's whole session rather than this child.
-        if not _IS_DARWIN:
-            resource.setrlimit(resource.RLIMIT_NPROC, (limits.pids, limits.pids))
+        # RLIMIT_NPROC is deliberately not set. It is per-real-UID on every
+        # platform, not per-process: it counts every process the invoking user
+        # already owns, so a value low enough to stop a fork bomb also stops
+        # the compiler from forking on any machine with a busy session — and
+        # one high enough to be safe stops nothing. The pid ceiling is a
+        # container-only guarantee (--pids-limit), which is one more reason
+        # this path is development-only.
 
         # New session, so a timeout can take the whole process group down
         # rather than leaving orphaned children spinning.
