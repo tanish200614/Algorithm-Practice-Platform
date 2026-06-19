@@ -44,13 +44,20 @@ async def lifespan(_app: FastAPI):
         )
 
     status = sandbox_status()
-    if not status["isolated"]:
-        print(
-            f"[sandbox] WARNING: running in '{status['mode']}' mode — "
-            f"{status['detail']}. Submissions are NOT isolated."
-        )
-    else:
+    if status["isolated"]:
         print(f"[sandbox] isolating submissions via {status['detail']}")
+    else:
+        # Name the languages rather than saying nothing is isolated: in
+        # "partial" mode some of them are, and a blanket warning is both
+        # alarming and inaccurate.
+        loose = [lang for lang, ok in status["languages"].items() if not ok]
+        safe = [lang for lang, ok in status["languages"].items() if ok]
+        print(
+            f"[sandbox] WARNING: mode '{status['mode']}' — "
+            f"{', '.join(loose)} run on the host WITHOUT isolation"
+            + (f" ({', '.join(safe)} isolated)" if safe else "")
+            + f". {status['detail']}"
+        )
 
     yield
 

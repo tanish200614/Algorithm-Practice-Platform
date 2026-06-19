@@ -83,9 +83,15 @@ class TestMetadata:
         assert "ada" in names
 
     def test_sandbox_status_states_whether_it_isolates(self, client):
+        from sandbox import SANDBOX_MODES
+
         body = client.get("/api/sandbox").json()
         assert isinstance(body["isolated"], bool)
-        assert body["mode"] in {"docker", "host-rlimit", "unavailable"}
+        # Compared against the module's own set rather than a copy, so adding a
+        # mode cannot leave this assertion silently stale.
+        assert body["mode"] in SANDBOX_MODES
+        # Whatever the mode, the per-language breakdown has to be complete.
+        assert set(body["languages"]) == {"python", "cpp", "java"}
 
 
 class TestExecution:

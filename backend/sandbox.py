@@ -37,6 +37,11 @@ CPU_LIMIT_HEADROOM_S = 5
 
 SANDBOX_TAG = os.environ.get("SANDBOX_TAG", "latest")
 
+# Every value sandbox_status()["mode"] can take. Exported so callers and tests
+# reference one definition — a new mode was added once without the test that
+# enumerates them being updated, and CI was the only environment that hit it.
+SANDBOX_MODES = frozenset({"docker", "partial", "host-rlimit", "unavailable"})
+
 IMAGES = {
     "python": f"algobattle-sandbox-python:{SANDBOX_TAG}",
     "cpp": f"algobattle-sandbox-cpp:{SANDBOX_TAG}",
