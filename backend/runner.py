@@ -32,7 +32,12 @@ int main() {{
 }}
 """
 
+# java.util is imported for the same reason the C++ scaffold includes
+# <unordered_map>: essentially every real solution reaches for a collection,
+# and without it the submission fails to compile with "cannot find symbol".
 JAVA_SCAFFOLD = """\
+import java.util.*;
+
 public class Solution {{
     {code}
 
@@ -78,14 +83,22 @@ def run_cpp(code: str) -> dict:
     return _result(res, "cpp")
 
 
-def run_java(code: str) -> dict:
+def prepare_java_source(code: str, scaffold: str = None) -> tuple:
+    """
+    Wrap a Java submission into a compilable file; returns (source, class_name).
+
+    Submissions are bare methods, so they need a class around them. One that
+    brings its own `public class` is used verbatim, but its name still has to
+    be recovered — javac requires the filename to match the public class.
+    """
     if "public class" in code:
-        source = code
         match = re.search(r"public\s+class\s+(\w+)", code)
-        class_name = match.group(1) if match else "Solution"
-    else:
-        source = JAVA_SCAFFOLD.format(code=code)
-        class_name = "Solution"
+        return code, (match.group(1) if match else "Solution")
+    return (scaffold or JAVA_SCAFFOLD).format(code=code), "Solution"
+
+
+def run_java(code: str) -> dict:
+    source, class_name = prepare_java_source(code)
 
     res = run_sandboxed(
         "java",
