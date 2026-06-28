@@ -460,6 +460,21 @@ def cpp_compile_to_asm(source_name: str = "solution.cpp", opt: str = "-O2",
     ]
 
 
+def java_compile_to_bytecode(class_name: str = "Solution") -> list:
+    """
+    Compile, then disassemble the resulting class file with javap.
+
+    -g keeps local variable names so the listing reads against the source
+    rather than as slot numbers, and -p includes private members, since a
+    submission's helper methods are usually the interesting part.
+    """
+    return [
+        f'javac -g -d /tmp {class_name}.java 2>/tmp/cc.err '
+        f'|| {{ cat /tmp/cc.err >&2; exit {COMPILE_ERROR_EXIT}; }}; '
+        f'javap -c -p -cp /tmp {class_name}'
+    ]
+
+
 def java_compile_and_run(class_name: str = "Solution") -> list:
     return [
         f'javac -d /tmp {class_name}.java 2>/tmp/cc.err '
