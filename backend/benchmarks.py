@@ -1,11 +1,13 @@
-import json, math
+import json, math, re
 
 from problems import PROBLEMS
 from ml import clusterer as _clusterer, predict_next
+from runner import prepare_java_source
 from sandbox import (
     cpp_compile_and_run,
     cpp_compile_to_asm,
     java_compile_and_run,
+    java_compile_to_bytecode,
     run_sandboxed,
 )
 
@@ -343,6 +345,112 @@ def compile_to_assembly(code: str, opt: str = "-O2"):
         last_error = _sandbox_error(res)
 
     return None, last_error
+
+
+# ── Java bytecode viewer ──────────────────────────────────────────────────────
+
+# No main method: javap only needs a compiled class, and main's bytecode
+# would be noise on top of the method actually being read.
+JAVA_BYTECODE_SCAFFOLD = """\
+import java.util.*;
+
+public class Solution {{
+{code}
+}}
+"""
+
+_METHOD_RE = re.compile(r"^ {2}(\S.*?);\s*$")
+_INSTR_RE = re.compile(r"^\s+(\d+):\s+(\S+)")
+
+# Opcodes worth calling out, and why a reader should care.
+_BOXING = ("Integer.valueOf", "Long.valueOf", "Double.valueOf", "Character.valueOf",
+           "Boolean.valueOf", "Float.valueOf", "Short.valueOf", "Byte.valueOf")
+_UNBOXING = (".intValue", ".longValue", ".doubleValue", ".charValue",
+             ".booleanValue", ".floatValue")
+
+
+def compile_to_bytecode(code: str):
+    """
+    Compile a Java submission and disassemble it. Returns (listing, error).
+    """
+    source, class_name = prepare_java_source(code, JAVA_BYTECODE_SCAFFOLD)
+    res = run_sandboxed(
+        "java",
+        {f"{class_name}.java": source},
+        java_compile_to_bytecode(class_name),
+    )
+    if res.ok and res.stdout.strip():
+        return res.stdout, None
+    return None, _sandbox_error(res)
+
+
+def parse_bytecode_methods(listing: str) -> list:
+    """Per-method instruction counts, so size differences are visible at a
+    glance instead of being counted by hand."""
+    methods, current = [], None
+    for line in listing.splitlines():
+        m = _METHOD_RE.match(line)
+        if m and not line.strip().startswith("Compiled from"):
+            current = {"signature": m.group(1).strip(), "instructions": 0}
+            methods.append(current)
+            continue
+        if current and _INSTR_RE.match(line):
+            current["instructions"] += 1
+    # The implicit no-arg constructor is scaffolding, not the player's work.
+    return [m for m in methods if m["instructions"] > 0
+            and not m["signature"].endswith("Solution()")]
+
+
+def bytecode_insights(listing: str) -> list:
+    """
+    The few facts in a javap listing that actually teach something. Reading
+    raw bytecode is a skill; pointing at the costly parts is the useful half.
+    """
+    out = []
+
+    boxes = sum(listing.count(sym) for sym in _BOXING)
+    if boxes:
+        out.append({
+            "label": f"{boxes} autoboxing conversion{'s' if boxes != 1 else ''}",
+            "detail": "Each Integer.valueOf allocates (or interns) a wrapper "
+                      "object. Inside a hot loop this is the usual reason a "
+                      "Java solution trails an equivalent C++ one.",
+        })
+
+    unboxes = sum(listing.count(sym) for sym in _UNBOXING)
+    if unboxes:
+        out.append({
+            "label": f"{unboxes} unboxing call{'s' if unboxes != 1 else ''}",
+            "detail": "Unwrapping a boxed value back to a primitive. Paired "
+                      "with the boxing above, this is the cost of using a "
+                      "Map<Integer,Integer> instead of an int[].",
+        })
+
+    if "makeConcatWithConstants" in listing:
+        out.append({
+            "label": "String concatenation via invokedynamic",
+            "detail": "javac compiles + on strings to an indy call. In a loop "
+                      "that builds a new string every iteration — a StringBuilder "
+                      "kept outside the loop avoids it.",
+        })
+
+    if "java/lang/StringBuilder" in listing:
+        out.append({
+            "label": "StringBuilder allocated",
+            "detail": "Check whether it is created inside a loop. One per "
+                      "iteration defeats the point of using it at all.",
+        })
+
+    invokes = sum(listing.count(op) for op in
+                  ("invokevirtual", "invokestatic", "invokeinterface", "invokespecial"))
+    if invokes:
+        out.append({
+            "label": f"{invokes} method invocation{'s' if invokes != 1 else ''}",
+            "detail": "The JIT inlines most of these at runtime, so the count "
+                      "is an upper bound on what actually executes as a call.",
+        })
+
+    return out
 
 
 # ── Complexity detection ──────────────────────────────────────────────────────
