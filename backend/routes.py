@@ -5,7 +5,13 @@ from pydantic import BaseModel
 from problems import PROBLEMS, LANGUAGES, language_available
 from runner import run_submission
 from sandbox import sandbox_status
-from benchmarks import compile_to_assembly, run_cpp_benchmark_with_opt
+from benchmarks import (
+    bytecode_insights,
+    compile_to_assembly,
+    compile_to_bytecode,
+    parse_bytecode_methods,
+    run_cpp_benchmark_with_opt,
+)
 from ml import elo, solve_times, difficulty
 from auth import hash_password, verify_password, create_token, get_current_user
 from database import create_user, get_user, get_stats, all_stats
@@ -162,6 +168,29 @@ def get_assembly(req: AsmRequest):
         "o0_ms": round(o0["ms"], 3) if o0 and o0.get("ms") else None,
         "o2_ms": round(o2["ms"], 3) if o2 and o2.get("ms") else None,
         "speedup": speedup,
+    }
+
+
+# ── Java bytecode viewer ──────────────────────────────────────────────────────
+
+class BytecodeRequest(BaseModel):
+    code: str
+
+
+@router.post("/bytecode")
+def get_bytecode(req: BytecodeRequest):
+    """The Java counterpart to /asm: what the JVM will actually execute."""
+    if not language_available("java"):
+        return {"error": "No Java toolchain available on this server"}
+
+    listing, err = compile_to_bytecode(req.code)
+    if err:
+        return {"error": err[:500]}
+
+    return {
+        "bytecode": listing,
+        "methods": parse_bytecode_methods(listing),
+        "insights": bytecode_insights(listing),
     }
 
 

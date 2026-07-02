@@ -95,3 +95,12 @@ class TestCompilation:
         listing, err = compile_to_bytecode("static int f() { this is not java }")
         assert listing is None
         assert "Compile error" in err
+
+
+class TestInsightScoping:
+    def test_the_synthetic_constructor_contributes_no_counts(self):
+        """javac's implicit constructor contains an invokespecial. Counting it
+        made a submission of pure arithmetic report a method invocation it
+        never wrote."""
+        insights = bytecode_insights(SAMPLE)
+        assert not any("invocation" in i["label"] for i in insights)

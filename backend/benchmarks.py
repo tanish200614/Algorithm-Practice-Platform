@@ -384,28 +384,53 @@ def compile_to_bytecode(code: str):
     return None, _sandbox_error(res)
 
 
-def parse_bytecode_methods(listing: str) -> list:
-    """Per-method instruction counts, so size differences are visible at a
-    glance instead of being counted by hand."""
-    methods, current = [], None
+def _method_blocks(listing: str) -> list:
+    """
+    Split a javap listing into (signature, lines) per method.
+
+    The constructor javac synthesises is dropped here rather than at each
+    call site: it is scaffolding, and counting its invokespecial made a
+    submission of pure arithmetic report a method invocation it never made.
+    """
+    blocks, current = [], None
     for line in listing.splitlines():
         m = _METHOD_RE.match(line)
         if m and not line.strip().startswith("Compiled from"):
-            current = {"signature": m.group(1).strip(), "instructions": 0}
-            methods.append(current)
+            current = {"signature": m.group(1).strip(), "lines": []}
+            blocks.append(current)
             continue
-        if current and _INSTR_RE.match(line):
-            current["instructions"] += 1
-    # The implicit no-arg constructor is scaffolding, not the player's work.
-    return [m for m in methods if m["instructions"] > 0
-            and not m["signature"].endswith("Solution()")]
+        if current is not None:
+            current["lines"].append(line)
+
+    return [
+        b for b in blocks
+        if not b["signature"].endswith("Solution()")
+        and any(_INSTR_RE.match(l) for l in b["lines"])
+    ]
+
+
+def parse_bytecode_methods(listing: str) -> list:
+    """Per-method instruction counts, so size differences are visible at a
+    glance instead of being counted by hand."""
+    return [
+        {
+            "signature": b["signature"],
+            "instructions": sum(1 for l in b["lines"] if _INSTR_RE.match(l)),
+        }
+        for b in _method_blocks(listing)
+    ]
 
 
 def bytecode_insights(listing: str) -> list:
     """
     The few facts in a javap listing that actually teach something. Reading
     raw bytecode is a skill; pointing at the costly parts is the useful half.
+
+    Only the submission's own methods are considered, so the synthesised
+    constructor cannot contribute counts the player did not write.
     """
+    blocks = _method_blocks(listing)
+    listing = "\n".join(l for b in blocks for l in b["lines"]) if blocks else listing
     out = []
 
     boxes = sum(listing.count(sym) for sym in _BOXING)
