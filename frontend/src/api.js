@@ -69,6 +69,8 @@ export const api = {
     request("/run", { method: "POST", body: { code, language }, token }),
   asm: (code, problemId, token) =>
     request("/asm", { method: "POST", body: { code, problem_id: problemId }, token }),
+  bytecode: (code, token) =>
+    request("/bytecode", { method: "POST", body: { code }, token }),
 
   createRoom: (problemId, token) =>
     request("/room/create", { method: "POST", body: { problem_id: problemId }, token }),

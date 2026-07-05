@@ -1816,3 +1816,61 @@ textarea::placeholder { color: var(--text-muted); }
   display: flex;
   gap: 6px;
 }
+
+/* ── Bytecode viewer ──────────────────────────────────────────────────────── */
+
+.bytecode-insights {
+  margin: 0;
+  padding: 8px 16px;
+  list-style: none;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  max-height: 130px;
+  overflow-y: auto;
+}
+
+.bytecode-insights li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 3px 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.bytecode-insights strong {
+  color: var(--accent);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.bytecode-insights span {
+  color: var(--text-muted);
+}
+
+.bytecode-methods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 16px;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.bytecode-method {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 7px;
+}
+
+.bytecode-method em {
+  color: var(--accent);
+  font-style: normal;
+  font-weight: 600;
+}

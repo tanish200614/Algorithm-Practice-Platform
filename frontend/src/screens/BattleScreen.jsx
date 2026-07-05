@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api.js";
 import { starterFor } from "../starters.js";
 import AsmPanel from "../components/AsmPanel.jsx";
+import BytecodePanel from "../components/BytecodePanel.jsx";
 import CodeEditor from "../components/CodeEditor.jsx";
 import RaceChart from "../components/RaceChart.jsx";
 import ResultCard from "../components/ResultCard.jsx";
@@ -113,6 +114,7 @@ export default function BattleScreen({
   const [testOutput, setTestOutput] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [asm, setAsm] = useState(null);
+  const [bytecode, setBytecode] = useState(null);
 
   const opponent = players.find((p) => p !== you) ?? "Opponent";
 
@@ -120,6 +122,7 @@ export default function BattleScreen({
     setLanguage(id);
     setCode(starterFor(problem?.id, id));
     if (id !== "cpp") setAsm(null);
+    if (id !== "java") setBytecode(null);
   };
 
   const series = useMemo(() => {
@@ -151,6 +154,16 @@ export default function BattleScreen({
       setAsm(data.error ? { error: data.error } : data);
     } catch (err) {
       setAsm({ error: err.message });
+    }
+  }
+
+  async function showBytecode() {
+    setBytecode({ loading: true });
+    try {
+      const data = await api.bytecode(code, token);
+      setBytecode(data.error ? { error: data.error } : data);
+    } catch (err) {
+      setBytecode({ error: err.message });
     }
   }
 
@@ -202,6 +215,11 @@ export default function BattleScreen({
                     ⊞ ASM
                   </button>
                 )}
+                {language === "java" && (
+                  <button className="btn-asm" onClick={showBytecode}>
+                    ⊞ Bytecode
+                  </button>
+                )}
               </div>
             </div>
             <CodeEditor
@@ -224,6 +242,9 @@ export default function BattleScreen({
           </div>
 
           {asm && <AsmPanel state={asm} onClose={() => setAsm(null)} />}
+          {bytecode && (
+            <BytecodePanel state={bytecode} onClose={() => setBytecode(null)} />
+          )}
         </div>
 
         <div className="arena-right">
