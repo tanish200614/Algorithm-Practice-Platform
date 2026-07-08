@@ -1,4 +1,4 @@
-from ml import EloTracker, SolutionClusterer, code_similarity, label_approach
+from ml import DifficultyEstimator, EloTracker, SolutionClusterer, code_similarity, label_approach
 
 
 class TestElo:
@@ -92,3 +92,39 @@ class TestCodeSimilarity:
 
     def test_empty_input_is_not_a_match(self):
         assert code_similarity("", "def f(): pass") == 0.0
+
+
+class TestDifficultyBlending:
+    """The estimator is meant to shift from text heuristics toward observed
+    ELO as evidence accumulates."""
+
+    DESC = ("Given a list of integers and a target, return the indices of two "
+            "numbers that add up to the target.")
+
+    def test_a_problem_everyone_fails_is_reported_harder(self):
+        """_solve_counts is keyed by player, so looking a problem id up in it
+        always returned 0 — the ELO term carried zero weight and the score
+        never moved off the text heuristic no matter what happened."""
+        elo, est = EloTracker(), DifficultyEstimator()
+        before = est.score(self.DESC, "two_sum", elo)["score"]
+
+        for i in range(40):
+            elo.update(f"p{i}", "two_sum", solved=False)
+
+        after = est.score(self.DESC, "two_sum", elo)["score"]
+        assert elo.get_difficulty("two_sum") > 1200
+        assert after > before
+
+    def test_attempts_count_the_problem_not_the_player(self):
+        elo = EloTracker()
+        elo.update("ada", "two_sum", solved=True)
+        elo.update("bob", "two_sum", solved=False)
+        assert elo.get_attempts("two_sum") == 2
+        assert elo._solve_counts["ada"] == 1
+
+    def test_one_attempt_barely_moves_the_estimate(self):
+        """Weight ramps with evidence, so a single result must not swing it."""
+        elo, est = EloTracker(), DifficultyEstimator()
+        before = est.score(self.DESC, "two_sum", elo)["score"]
+        elo.update("ada", "two_sum", solved=False)
+        assert abs(est.score(self.DESC, "two_sum", elo)["score"] - before) <= 1

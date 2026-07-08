@@ -228,13 +228,22 @@ class EloTracker:
     def __init__(self):
         self._skills: dict = {}
         self._difficulties: dict = dict(self._INITIAL_DIFFICULTIES)
+        # Keyed by player name. Distinct from _attempts, which is keyed by
+        # problem — conflating the two made the difficulty blend below a
+        # no-op, since a problem id is never a key in here.
         self._solve_counts: dict = defaultdict(int)
+        self._attempts: dict = defaultdict(int)     # problem_id -> times rated
 
     def get_skill(self, name: str) -> float:
         return self._skills.get(name, self.DEFAULT)
 
     def get_difficulty(self, problem_id: str) -> float:
         return self._difficulties.get(problem_id, self.DEFAULT)
+
+    def get_attempts(self, problem_id: str) -> int:
+        """How many rated attempts a problem has seen — the confidence behind
+        its ELO difficulty."""
+        return self._attempts[problem_id]
 
     def tier(self, name: str) -> str:
         s = self.get_skill(name)
@@ -252,6 +261,7 @@ class EloTracker:
         delta = self.K * (outcome - expected)
         self._skills[name] = S + delta
         self._difficulties[problem_id] = D + self.K * (expected - outcome)
+        self._attempts[problem_id] += 1
         if solved:
             self._solve_counts[name] += 1
         return round(delta)
@@ -343,8 +353,11 @@ class DifficultyEstimator:
             # ELO starts at 1000; map [800, 1300] → [1, 10]
             elo_score = round((elo_diff - 800) / 50 + 1)
             elo_score = min(10, max(1, elo_score))
-            solves = elo._solve_counts.get(problem_id, 0)
-            weight = min(solves / 20, 0.8)   # ELO takes up to 80% weight at 20 solves
+            # Attempts on this problem, not solves by some player of the same
+            # name: _solve_counts is keyed by player, so the old lookup was
+            # always 0 and the ELO term never carried any weight at all.
+            attempts = elo.get_attempts(problem_id)
+            weight = min(attempts / 20, 0.8)  # ELO reaches 80% weight at 20 attempts
             final_score = round(weight * elo_score + (1 - weight) * text_score)
 
         tier = "Hard" if final_score >= 7 else ("Medium" if final_score >= 4 else "Easy")
