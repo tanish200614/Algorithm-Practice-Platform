@@ -26,6 +26,14 @@ def init_db():
             skill    REAL    DEFAULT 1000,
             solves   INTEGER DEFAULT 0
         );
+        -- The other half of the ELO pair. Without it, restarts kept the
+        -- ratings players earned but reset the difficulties they were earned
+        -- against, so the two sides of the system drifted apart.
+        CREATE TABLE IF NOT EXISTS problem_stats (
+            problem_id TEXT PRIMARY KEY,
+            difficulty REAL    DEFAULT 1000,
+            attempts   INTEGER DEFAULT 0
+        );
     """)
     c.commit()
     c.close()
@@ -76,6 +84,28 @@ def all_stats() -> list:
     c = _conn()
     rows = c.execute(
         "SELECT username, skill, solves FROM player_stats ORDER BY skill DESC"
+    ).fetchall()
+    c.close()
+    return [dict(r) for r in rows]
+
+
+# ── Problem stats ──────────────────────────────────────────────────────────────
+
+def upsert_problem_stats(problem_id: str, difficulty: float, attempts: int):
+    c = _conn()
+    c.execute("""
+        INSERT INTO problem_stats (problem_id, difficulty, attempts) VALUES (?,?,?)
+        ON CONFLICT(problem_id) DO UPDATE SET
+            difficulty=excluded.difficulty, attempts=excluded.attempts
+    """, (problem_id, difficulty, attempts))
+    c.commit()
+    c.close()
+
+
+def all_problem_stats() -> list:
+    c = _conn()
+    rows = c.execute(
+        "SELECT problem_id, difficulty, attempts FROM problem_stats"
     ).fetchall()
     c.close()
     return [dict(r) for r in rows]

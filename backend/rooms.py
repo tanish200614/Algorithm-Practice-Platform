@@ -9,7 +9,7 @@ def _get_problem(problem_id: str) -> dict:
     return PROBLEMS[problem_id]
 from ml import elo, solve_times, code_similarity
 from auth import token_from_query
-from database import get_stats, upsert_stats
+from database import get_stats, upsert_problem_stats, upsert_stats
 
 router = APIRouter()
 rooms: dict[str, dict] = {}
@@ -184,6 +184,14 @@ async def battle_ws(websocket: WebSocket, room_code: str,
                                       any(x.get("ok") for x in r["results"]))
                         elo_deltas[name] = elo.update(name, problem_id, solved)
                         upsert_stats(name, elo.get_skill(name), elo._solve_counts[name])
+
+                    # elo.update() moves the problem as well as the players, so
+                    # both halves of the pair are written in the same place.
+                    upsert_problem_stats(
+                        problem_id,
+                        elo.get_difficulty(problem_id),
+                        elo.get_attempts(problem_id),
+                    )
 
                     # Recommendations
                     all_problems = list(PROBLEMS.keys())

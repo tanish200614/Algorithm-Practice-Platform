@@ -122,3 +122,43 @@ class TestRooms:
         body = client.get(f"/api/room/{code}").json()
         assert body["status"] == "waiting"
         assert body["player_count"] == 0
+
+
+class TestRatingPersistence:
+    """ELO rates players against problems. Persisting one side without the
+    other lets the two drift apart across restarts."""
+
+    def test_problem_difficulty_survives_a_restart(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("DB_PATH", str(tmp_path / "t.db"))
+        import database
+        monkeypatch.setattr(database, "DB_PATH", str(tmp_path / "t.db"))
+        database.init_db()
+
+        from ml import EloTracker
+
+        # A first run where everyone fails the problem, so it rates upward.
+        hot = EloTracker()
+        for i in range(30):
+            hot.update(f"p{i}", "two_sum", solved=False)
+        drifted = hot.get_difficulty("two_sum")
+        assert drifted > 1200
+        database.upsert_problem_stats(
+            "two_sum", drifted, hot.get_attempts("two_sum")
+        )
+
+        # A second process starts with a fresh tracker and reloads.
+        cold = EloTracker()
+        assert cold.get_difficulty("two_sum") == 1000      # before restoring
+        for row in database.all_problem_stats():
+            cold._difficulties[row["problem_id"]] = row["difficulty"]
+            cold._attempts[row["problem_id"]] = row["attempts"]
+
+        assert cold.get_difficulty("two_sum") == drifted
+        assert cold.get_attempts("two_sum") == 30
+
+    def test_a_problem_never_played_keeps_its_seeded_difficulty(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("DB_PATH", str(tmp_path / "t.db"))
+        import database
+        monkeypatch.setattr(database, "DB_PATH", str(tmp_path / "t.db"))
+        database.init_db()
+        assert database.all_problem_stats() == []

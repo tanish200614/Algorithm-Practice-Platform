@@ -9,7 +9,7 @@ from rooms import router as rooms_router
 from matchmaking import router as queue_router
 from tournament import router as tournament_router
 from auth import using_dev_secret
-from database import init_db, all_stats
+from database import all_problem_stats, all_stats, init_db
 from ml import elo
 from sandbox import sandbox_status
 
@@ -36,6 +36,12 @@ async def lifespan(_app: FastAPI):
     for row in all_stats():
         elo._skills[row["username"]] = row["skill"]
         elo._solve_counts[row["username"]] = row["solves"]
+
+    # Restoring skills without difficulties would hand players ratings earned
+    # against a scale that no longer exists.
+    for row in all_problem_stats():
+        elo._difficulties[row["problem_id"]] = row["difficulty"]
+        elo._attempts[row["problem_id"]] = row["attempts"]
 
     if using_dev_secret():
         print(
