@@ -1,0 +1,39 @@
+# The API creates one Job per submission, so it needs API access — but only to
+# the objects it actually creates, and only in its own namespace. A Role rather
+# than a ClusterRole, and no verbs on secrets, pods/exec or anything else.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backend
+  namespace: algobattle
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: runner-manager
+  namespace: algobattle
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "get", "delete"]
+  # Reading logs is how a submission's output gets back to the player.
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: backend-runner-manager
+  namespace: algobattle
+subjects:
+  - kind: ServiceAccount
+    name: backend
+    namespace: algobattle
+roleRef:
+  kind: Role
+  name: runner-manager
+  apiGroup: rbac.authorization.k8s.io

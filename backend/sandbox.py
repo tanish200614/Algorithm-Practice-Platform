@@ -40,7 +40,7 @@ SANDBOX_TAG = os.environ.get("SANDBOX_TAG", "latest")
 # Every value sandbox_status()["mode"] can take. Exported so callers and tests
 # reference one definition — a new mode was added once without the test that
 # enumerates them being updated, and CI was the only environment that hit it.
-SANDBOX_MODES = frozenset({"docker", "partial", "host-rlimit", "unavailable"})
+SANDBOX_MODES = frozenset({"docker", "k8s", "partial", "host-rlimit", "unavailable"})
 
 IMAGES = {
     "python": f"algobattle-sandbox-python:{SANDBOX_TAG}",
@@ -48,9 +48,13 @@ IMAGES = {
     "java": f"algobattle-sandbox-java:{SANDBOX_TAG}",
 }
 
-# Set SANDBOX_MODE=docker to refuse to fall back — the right setting in any
-# deployed environment, where silently running untrusted code on the host
-# would be much worse than failing the request.
+# auto    — prefer Docker, fall back to host rlimits (development)
+# docker  — Docker only; refuse the host fallback
+# k8s     — run each submission as a Kubernetes Job; no runtime socket anywhere
+#
+# Anything but "auto" refuses to fall back, which is the right setting in a
+# deployed environment: silently running untrusted code on the host is much
+# worse than failing the request.
 SANDBOX_MODE = os.environ.get("SANDBOX_MODE", "auto").lower()
 
 
@@ -163,6 +167,20 @@ def _ready_languages() -> set:
 
 
 def sandbox_status() -> dict:
+    if SANDBOX_MODE == "k8s":
+        from sandbox_k8s import NAMESPACE, kubectl_available
+
+        reachable = kubectl_available()
+        return {
+            "mode": "k8s",
+            "isolated": reachable,
+            "detail": (f"kubernetes jobs in namespace {NAMESPACE}" if reachable
+                       else f"no reachable cluster or namespace {NAMESPACE}"),
+            "caveats": [] if reachable else ["cluster unreachable — submissions will fail"],
+            "languages": {lang: reachable for lang in IMAGES},
+            "images": IMAGES if reachable else {},
+        }
+
     ready = _ready_languages()
     detail = _probe_detail()
 
@@ -420,6 +438,16 @@ def run_sandboxed(language: str, files: dict, command: list,
         return SandboxResult("", f"Unsupported language: {language}", -1, 0.0)
 
     limits = limits or LANGUAGE_LIMITS.get(language, DEFAULT_LIMITS)
+
+    if SANDBOX_MODE == "k8s":
+        from sandbox_k8s import kubectl_available, run_k8s_job
+
+        if not kubectl_available():
+            return SandboxResult(
+                "", "Kubernetes sandbox unavailable: no reachable cluster or "
+                    "namespace", -1, 0.0, isolated=False,
+            )
+        return run_k8s_job(IMAGES[language], files, command, limits, SandboxResult)
 
     if docker_available(language):
         return _run_docker(language, files, command, limits)

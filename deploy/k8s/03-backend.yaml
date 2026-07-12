@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: algobattle
+spec:
+  # Rooms, the matchmaking queue and brackets are in-process dictionaries, so
+  # two replicas would put players in rooms that cannot see each other. This
+  # stays at 1 until that state moves to Redis.
+  replicas: 1
+  selector:
+    matchLabels: { app: backend }
+  template:
+    metadata:
+      labels: { app: backend }
+    spec:
+      serviceAccountName: backend
+      containers:
+        - name: backend
+          image: algobattle-backend:dev
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8000 }]
+          env:
+            - name: SANDBOX_MODE
+              value: "k8s"          # refuse to fall back to host execution
+            - name: SANDBOX_NAMESPACE
+              value: "algobattle"
+            - name: DB_PATH
+              value: "/data/algobattle.db"
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef: { name: backend-secret, key: SECRET_KEY }
+          resources:
+            requests: { memory: "128Mi", cpu: "100m" }
+            limits:   { memory: "512Mi", cpu: "1" }
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+          readinessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+      volumes:
+        # SQLite on an emptyDir: ratings live only as long as the pod. Real
+        # durability needs a PVC or RDS, which is the same limitation the
+        # single-instance deployment has.
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: algobattle
+spec:
+  selector: { app: backend }
+  ports: [{ port: 8000, targetPort: 8000 }]

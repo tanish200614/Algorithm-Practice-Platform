@@ -1,0 +1,9 @@
+# The default CNI (kindnet) does not implement NetworkPolicy: policies apply
+# cleanly and are then silently ignored. Since the sandbox's no-egress rule is
+# a security guarantee rather than a preference, the default is disabled and
+# Calico installed in its place, so the policy is actually enforced.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+networking:
+  disableDefaultCNI: true
+  podSubnet: "192.168.0.0/16"
