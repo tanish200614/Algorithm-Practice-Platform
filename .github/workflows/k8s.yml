@@ -1,0 +1,80 @@
+name: Kubernetes
+
+# The Jobs sandbox is a security boundary, so its guarantees are asserted
+# against a real cluster on every change rather than trusted from a laptop run.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/sandbox_k8s.py"
+      - "backend/sandbox.py"
+      - "backend/tests/test_sandbox_k8s.py"
+      - "deploy/k8s/**"
+      - ".github/workflows/k8s.yml"
+  pull_request:
+    paths:
+      - "backend/sandbox_k8s.py"
+      - "backend/sandbox.py"
+      - "backend/tests/test_sandbox_k8s.py"
+      - "deploy/k8s/**"
+      - ".github/workflows/k8s.yml"
+  workflow_dispatch:
+
+jobs:
+  sandbox:
+    name: Jobs sandbox on kind
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Install kind
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.33.0/kind-linux-amd64
+          chmod +x ./kind && sudo mv ./kind /usr/local/bin/kind
+          kind version
+
+      - name: Create cluster
+        # The config disables kindnet: it accepts NetworkPolicy and ignores it,
+        # which would make the egress test pass vacuously.
+        run: kind create cluster --name algobattle --config deploy/k8s/kind-cluster.yaml --wait 120s
+
+      - name: Install Calico so NetworkPolicy is actually enforced
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.28.2/manifests/calico.yaml
+          kubectl wait --for=condition=ready pod -l k8s-app=calico-node \
+            -n kube-system --timeout=300s
+          kubectl get nodes
+
+      - name: Build and load the Python sandbox image
+        run: |
+          docker build -f sandbox/python.Dockerfile -t algobattle-sandbox-python:latest sandbox/
+          kind load docker-image algobattle-sandbox-python:latest --name algobattle
+
+      - name: Apply manifests
+        run: |
+          kubectl apply -f deploy/k8s/00-namespace.yaml \
+                        -f deploy/k8s/01-rbac.yaml \
+                        -f deploy/k8s/02-networkpolicy.yaml
+          kubectl -n algobattle get networkpolicy
+
+      - name: Assert the sandbox guarantees
+        working-directory: backend
+        env:
+          SANDBOX_NAMESPACE: algobattle
+        run: python -m pytest tests/test_sandbox_k8s.py -v
+
+      - name: Show what the cluster is left holding
+        if: always()
+        # Every Job should have cleaned up after itself; a leak shows here.
+        run: kubectl -n algobattle get jobs,configmaps,pods
