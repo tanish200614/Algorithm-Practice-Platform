@@ -11,3 +11,4 @@ bcrypt==3.2.2
 # Tests
 pytest==8.4.2
 httpx==0.28.1
+openai

@@ -21,3 +21,4 @@ dist/
 # Editors
 .vscode/
 .idea/
+llm_cache.db
