@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from routes import router as code_router
+from ai_routes import router as ai_router
 from rooms import router as rooms_router
 from matchmaking import router as queue_router
 from tournament import router as tournament_router
@@ -79,6 +80,7 @@ app.add_middleware(
 )
 
 app.include_router(code_router, prefix=API_PREFIX)
+app.include_router(ai_router, prefix=API_PREFIX)
 app.include_router(rooms_router, prefix=API_PREFIX)
 app.include_router(queue_router, prefix=API_PREFIX)
 app.include_router(tournament_router, prefix=API_PREFIX)

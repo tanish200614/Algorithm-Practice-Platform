@@ -162,3 +162,20 @@ class TestRatingPersistence:
         monkeypatch.setattr(database, "DB_PATH", str(tmp_path / "t.db"))
         database.init_db()
         assert database.all_problem_stats() == []
+
+
+class TestAIEndpoints:
+    def test_ai_endpoints_require_auth(self, client):
+        assert client.post("/api/ai/interview", json={"message": "hi"}).status_code == 401
+        assert client.post("/api/ai/generate-problem",
+                           json={"topic": "arrays"}).status_code == 401
+
+    def test_a_missing_api_key_is_503_not_500(self, client, monkeypatch):
+        """No key configured is a deployment state, not a server fault, and the
+        status code should let a caller tell those apart."""
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.setattr("llm._client", None)
+        token = register(client).json()["token"]
+        res = client.post("/api/ai/interview", json={"message": "hi"},
+                          headers={"Authorization": f"Bearer {token}"})
+        assert res.status_code == 503
