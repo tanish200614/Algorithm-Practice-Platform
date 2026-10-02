@@ -12,11 +12,10 @@ const EMPTY = {
 };
 
 /**
- * Owns the battle-room WebSocket.
+ * Owns the battle room WebSocket.
  *
- * Results stream in per player rather than arriving together, so `results` is
- * keyed by name and merged as each message lands — the opponent's curve has to
- * survive your own results being written.
+ * Results come in per player, so `results` is keyed by name and merged as each
+ * message arrives. Otherwise your results would overwrite the opponent's curve.
  */
 export function useBattleRoom(roomCode, token) {
   const [state, setState] = useState(EMPTY);

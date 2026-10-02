@@ -84,7 +84,7 @@ async def queue_ws(websocket: WebSocket, token: str = Query(default=None)):
             pass
         return
 
-    # No match yet — wait in queue
+    # No match yet, wait in queue
     try:
         while True:
             try:

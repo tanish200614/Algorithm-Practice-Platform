@@ -87,8 +87,8 @@ class TestMetadata:
 
         body = client.get("/api/sandbox").json()
         assert isinstance(body["isolated"], bool)
-        # Compared against the module's own set rather than a copy, so adding a
-        # mode cannot leave this assertion silently stale.
+        # Compare against the module's own set so this stays correct when
+        # modes are added.
         assert body["mode"] in SANDBOX_MODES
         # Whatever the mode, the per-language breakdown has to be complete.
         assert set(body["languages"]) == {"python", "cpp", "java"}
@@ -171,8 +171,8 @@ class TestAIEndpoints:
                            json={"topic": "arrays"}).status_code == 401
 
     def test_a_missing_api_key_is_503_not_500(self, client, monkeypatch):
-        """No key configured is a deployment state, not a server fault, and the
-        status code should let a caller tell those apart."""
+        """No API key should return 503, not 500, so callers can tell it's a
+        config issue and not a crash."""
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.setattr("llm._client", None)
         token = register(client).json()["token"]

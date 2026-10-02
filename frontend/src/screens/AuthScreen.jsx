@@ -32,8 +32,8 @@ export default function AuthScreen({ onAuthenticated }) {
     try {
       if (mode === "register") {
         await api.register(username, password);
-        // Registration returns a token, but sending people through login once
-        // confirms the password they just chose is the one they think it is.
+        // Registration returns a token, but making people log in once checks
+        // they remember the password they just picked.
         setMode("login");
         setPassword("");
         setConfirm("");

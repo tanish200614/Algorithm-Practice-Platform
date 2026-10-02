@@ -10,9 +10,8 @@ class TestJavaScaffold:
     """The scaffold has to produce something that actually compiles."""
 
     def test_a_solution_using_collections_compiles(self):
-        """java.util is not imported by default, so a HashMap solution — which
-        is what nearly every real Two Sum answer looks like — failed to compile
-        with 'cannot find symbol' until the scaffold imported it."""
+        """java.util isn't imported by default, so a HashMap solution (which
+        is most Two Sum answers) failed with 'cannot find symbol'."""
         code = (
             "static int[] twoSum(int[] nums, int target) {\n"
             "    HashMap<Integer,Integer> seen = new HashMap<>();\n"

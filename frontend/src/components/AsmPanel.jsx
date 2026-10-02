@@ -1,6 +1,6 @@
 export default function AsmPanel({ state, onClose }) {
-  // .cfi_ directives are exception-handling metadata — pure noise when the
-  // point is to read what the optimiser produced.
+  // .cfi_ directives are exception-handling metadata, just noise when you're
+  // trying to read the optimised code.
   const cleaned = state.asm
     ? state.asm
         .split("\n")

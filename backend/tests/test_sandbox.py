@@ -1,10 +1,9 @@
 """
-Sandbox behaviour.
+Sandbox tests.
 
-The isolation guarantees (no network, unprivileged uid, memory ceiling) can
-only be asserted against real containers, so those tests skip when the images
-are not built. The rest — limit plumbing, compile-error detection, the probe
-cache — run anywhere.
+The isolation checks (no network, non-root uid, memory limit) need real
+containers, so they skip if the images aren't built. Everything else runs
+anywhere.
 """
 
 import dataclasses
@@ -22,9 +21,9 @@ requires_docker = pytest.mark.skipif(
 
 class TestProbeCache:
     def test_unprobed_cache_is_not_mistaken_for_a_result(self, monkeypatch):
-        """time.monotonic() can start near zero, so a 0.0 timestamp sentinel
-        would read as a fresh 'unavailable' result and silently skip the
-        daemon check for the process's first 30 seconds."""
+        """time.monotonic() can start near zero, so a 0.0 sentinel would look
+        like a fresh 'unavailable' result and skip the Docker check for the
+        first 30 seconds."""
         calls = []
 
         def fake_probe():
@@ -81,18 +80,17 @@ class TestExecution:
         assert "boom" in res.stderr
 
     def test_wall_clock_limit_kills_a_spinning_submission(self):
-        """A busy loop burns CPU as fast as wall time. If the CPU rlimit had no
-        headroom over the wall-clock budget the two would fire together, and a
-        spinning submission would be reported as an unexplained kill rather
-        than a timeout — which is what happened on Linux."""
+        """A busy loop burns CPU as fast as wall time. Without headroom on the
+        CPU rlimit both limits fire together, and on Linux this showed up as
+        an unexplained kill instead of a timeout."""
         limits = dataclasses.replace(DEFAULT_LIMITS, wall_clock_s=3.0)
         res = run_sandboxed("python", {"h.py": "while True: pass"}, ["h.py"], limits=limits)
         assert res.timed_out
         assert res.exit_code == 124
 
     def test_a_sleeping_submission_also_times_out(self):
-        """Sleeping burns no CPU, so this can only be caught by the wall
-        clock — it proves the timeout is not relying on the CPU rlimit."""
+        """Sleeping uses no CPU, so only the wall clock can catch this. Shows
+        the timeout doesn't depend on the CPU rlimit."""
         limits = dataclasses.replace(DEFAULT_LIMITS, wall_clock_s=3.0)
         res = run_sandboxed(
             "python", {"h.py": "import time; time.sleep(60)"}, ["h.py"], limits=limits
@@ -124,7 +122,7 @@ class TestExecution:
 
 @requires_docker
 class TestIsolation:
-    """The guarantees the platform actually rests on."""
+    """The core isolation guarantees."""
 
     def test_submissions_cannot_reach_the_network(self):
         code = (

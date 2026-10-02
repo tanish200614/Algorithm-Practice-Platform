@@ -27,11 +27,10 @@ jobs:
         working-directory: backend
         run: pip install -r requirements.txt
 
-      # The runner has a Docker daemon, so the isolation tests assert against
-      # a real container instead of skipping. Only the Python image is built:
-      # the C++ image alone is ~2GB, and sandbox availability is per-language,
-      # so C++ and Java simply fall back to the runner's own toolchain for the
-      # tests that just need a compiler.
+      # The runner has Docker, so the isolation tests run against a real
+      # container. Only the Python image is built since the C++ one is ~2GB.
+      # C++ and Java fall back to the runner's own toolchain for tests that
+      # just need a compiler.
       - name: Build the Python sandbox image
         run: docker build -f sandbox/python.Dockerfile -t algobattle-sandbox-python:latest sandbox/
 
@@ -68,8 +67,8 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      # Built but not pushed: this proves the Dockerfiles still work on every
-      # PR without publishing anything from unmerged code.
+      # Built but not pushed, just to check the Dockerfiles still work on
+      # every PR.
       - name: Build the API image
         uses: docker/build-push-action@v6
         with:

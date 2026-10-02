@@ -349,8 +349,7 @@ def compile_to_assembly(code: str, opt: str = "-O2"):
 
 # ── Java bytecode viewer ──────────────────────────────────────────────────────
 
-# No main method: javap only needs a compiled class, and main's bytecode
-# would be noise on top of the method actually being read.
+# No main method needed, javap only needs a compiled class.
 JAVA_BYTECODE_SCAFFOLD = """\
 import java.util.*;
 
@@ -362,7 +361,7 @@ public class Solution {{
 _METHOD_RE = re.compile(r"^ {2}(\S.*?);\s*$")
 _INSTR_RE = re.compile(r"^\s+(\d+):\s+(\S+)")
 
-# Opcodes worth calling out, and why a reader should care.
+# Opcodes worth pointing out, and why they matter.
 _BOXING = ("Integer.valueOf", "Long.valueOf", "Double.valueOf", "Character.valueOf",
            "Boolean.valueOf", "Float.valueOf", "Short.valueOf", "Byte.valueOf")
 _UNBOXING = (".intValue", ".longValue", ".doubleValue", ".charValue",
@@ -388,9 +387,8 @@ def _method_blocks(listing: str) -> list:
     """
     Split a javap listing into (signature, lines) per method.
 
-    The constructor javac synthesises is dropped here rather than at each
-    call site: it is scaffolding, and counting its invokespecial made a
-    submission of pure arithmetic report a method invocation it never made.
+    Drops the constructor javac adds. The player didn't write it, and its
+    invokespecial would show up as a method call they never made.
     """
     blocks, current = [], None
     for line in listing.splitlines():
@@ -410,8 +408,7 @@ def _method_blocks(listing: str) -> list:
 
 
 def parse_bytecode_methods(listing: str) -> list:
-    """Per-method instruction counts, so size differences are visible at a
-    glance instead of being counted by hand."""
+    """Instruction count per method."""
     return [
         {
             "signature": b["signature"],
@@ -423,11 +420,8 @@ def parse_bytecode_methods(listing: str) -> list:
 
 def bytecode_insights(listing: str) -> list:
     """
-    The few facts in a javap listing that actually teach something. Reading
-    raw bytecode is a skill; pointing at the costly parts is the useful half.
-
-    Only the submission's own methods are considered, so the synthesised
-    constructor cannot contribute counts the player did not write.
+    Pull out the parts of a javap listing worth pointing out (boxing, method
+    calls, etc). Only looks at the player's own methods.
     """
     blocks = _method_blocks(listing)
     listing = "\n".join(l for b in blocks for l in b["lines"]) if blocks else listing
@@ -486,8 +480,8 @@ def detect_complexity(bench_results):
 
     In log space: log(ms) = slope * log(n) + c
     The slope is the exponent:  O(n) → slope≈1,  O(n²) → slope≈2,  O(1) → slope≈0
-    This is far more robust than linear-space fitting because constant factors
-    cancel out and the signal is visible even when absolute timings are tiny.
+    Constant factors cancel out in log space, so this still works when the
+    timings are tiny.
     """
     points = [
         (r["n"], r["ms"]) for r in bench_results

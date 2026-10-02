@@ -1,15 +1,10 @@
 """
-Problem generation, with every generated problem executed before it is trusted.
+Problem generation. Every generated problem gets run before we use it.
 
-A model asked for a coding problem will happily return one whose reference
-solution does not satisfy its own test cases, or whose expected outputs were
-reasoned about rather than computed. Neither failure is visible by reading the
-JSON — the only way to find it is to run the thing.
-
-So generation is a pipeline, not a call: the model proposes, the reference
-solution is executed against the proposed tests inside the same sandbox that
-runs player submissions, and anything that disagrees with itself is rejected
-and regenerated. What reaches the problem set has been observed to work.
+The model sometimes returns a reference solution that fails its own test
+cases, or expected outputs it guessed instead of computed. You can't tell from
+the JSON, so we run the reference solution against the tests in the sandbox
+and regenerate if it fails.
 """
 
 import json
@@ -20,10 +15,9 @@ from sandbox import run_sandboxed
 
 MIN_TEST_CASES = 4
 
-# strict json_schema requires every property listed in `required` and forbids
-# additionalProperties, so the shape below is a guarantee rather than a hope.
-# args/expected are JSON-encoded strings because a test case's arguments are
-# arbitrarily typed, which strict mode cannot express directly.
+# strict json_schema makes every property required and bans extra ones, so the
+# output always has this shape. args/expected are JSON strings because test
+# arguments can be any type, which strict mode can't express.
 PROBLEM_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -96,10 +90,9 @@ def _harness(problem: dict) -> str:
 
 def validate_problem(problem: dict) -> tuple:
     """
-    Execute a generated problem against itself. Returns (ok, report).
+    Run a generated problem against its own tests. Returns (ok, report).
 
-    Static checks first because they are free; then the part that actually
-    matters, which is running the code.
+    Cheap static checks first, then actually run the code.
     """
     for field in PROBLEM_SCHEMA["required"]:
         if not problem.get(field):
@@ -112,8 +105,8 @@ def validate_problem(problem: dict) -> tuple:
         return False, {"stage": "shape",
                        "error": f"only {len(problem['test_cases'])} test cases"}
 
-    # A reference solution that does not define the function it claims to is
-    # the most common generation failure, and it is cheap to catch here.
+    # Most common failure: the reference solution doesn't define the function
+    # it's supposed to. Easy to catch here.
     if not re.search(rf"def\s+{re.escape(problem['function_name'])}\s*\(",
                      problem["reference_solution"]):
         return False, {"stage": "shape",
@@ -139,11 +132,9 @@ def validate_problem(problem: dict) -> tuple:
 
 def generate_problem(topic: str, difficulty: str = "medium", attempts: int = 3) -> dict:
     """
-    Generate a problem and return it only once it has validated.
+    Generate a problem and only return it once it passes validation.
 
-    Retries bypass the cache: a rejected problem is a deterministic output for
-    that request, so asking again with caching on would return the same broken
-    problem forever.
+    Retries skip the cache, otherwise we'd get the same broken problem back.
     """
     reports = []
     for attempt in range(attempts):

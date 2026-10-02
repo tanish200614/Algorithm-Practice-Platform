@@ -1,7 +1,6 @@
 export default function BytecodePanel({ state, onClose }) {
-  // Constant-pool refs (#7, #21) are indirection the reader can't resolve
-  // without the pool itself; javap already prints the resolved name in the
-  // trailing comment, so the number is noise.
+  // Constant pool refs (#7, #21) aren't useful without the pool, and javap
+  // already prints the resolved name in the trailing comment.
   const cleaned = state.bytecode
     ? state.bytecode
         .split("\n")

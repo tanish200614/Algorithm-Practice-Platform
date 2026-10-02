@@ -1,11 +1,10 @@
-# The Docker backend passes --network none. This is the equivalent: runner pods
-# get no egress at all, so a submission cannot exfiltrate, fetch a payload, or
-# use the cluster as a source of traffic.
+# Same idea as Docker's --network none: runner pods get no egress, so a
+# submission can't send data out, download anything, or hit other hosts.
 #
-# Note kind's default CNI does not enforce NetworkPolicy. The policy is correct
-# and applies cleanly, but on kind it is declarative only — a cluster running
-# Calico or Cilium enforces it. The Job's lack of a service account token is
-# what actually protects the API server on kind.
+# kind's default CNI doesn't enforce NetworkPolicy. The policy applies fine
+# but only actually works on clusters running Calico or Cilium. On default
+# kind, what protects the API server is that the Job has no service account
+# token.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

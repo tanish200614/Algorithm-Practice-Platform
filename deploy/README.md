@@ -20,7 +20,7 @@
 
 The load balancer routes by path: `/api/*` and `/health` go to the API, and
 everything else is the single-page app. The API never executes a submission
-itself — it asks the host's Docker daemon to start a throwaway container per
+itself. It asks the host's Docker daemon to start a throwaway container per
 run.
 
 ## Two constraints worth understanding before changing anything
@@ -43,7 +43,7 @@ routed to different tasks would sit in rooms that cannot see each other. The
 service is therefore `DesiredCount: 1`, and the target group uses stickiness so
 a reconnecting player returns to the task holding their room.
 
-Raising that count requires moving the shared state out of process first —
+Raising that count requires moving the shared state out of process first:
 ElastiCache for Redis, with rooms as hashes and the broadcast fan-out over
 pub/sub. Until then, scaling up means a bigger instance, not more tasks.
 
@@ -65,7 +65,7 @@ leaves the services unable to start. Push images once with the `Deploy`
 workflow (tag a release, or run it manually), and the services converge.
 
 `CertificateArn` is optional. Without it the listener serves plain HTTP, which
-is fine for a demo but means passwords cross the network in the clear — set it
+is fine for a demo but means passwords cross the network in the clear, so set it
 for anything real.
 
 ### What CI does
@@ -85,7 +85,7 @@ that pinned the previous SHA.
 ## Running it locally
 
 ```bash
-./sandbox/build.sh                      # required — see below
+./sandbox/build.sh                      # required, see below
 export SECRET_KEY=$(openssl rand -hex 32)
 docker compose up --build
 open http://localhost:8080
@@ -93,7 +93,7 @@ open http://localhost:8080
 
 The sandbox images have to exist first. The API image sets
 `SANDBOX_MODE=docker`, which makes the backend fail a submission rather than
-fall back to running it unisolated on the host — the right way round for
+fall back to running it unisolated on the host. That's the right call for
 untrusted code, but it does mean a missing image looks like a broken run. The
 lobby surfaces the sandbox mode, and the backend logs it at startup.
 

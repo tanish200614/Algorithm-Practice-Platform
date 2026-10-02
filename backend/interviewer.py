@@ -1,15 +1,11 @@
 """
 Mock technical interviewer.
 
-The interviewer is given one tool: it can run the candidate's code in the same
-sandbox that runs everything else. That is the whole point — an interviewer
-that can only read code has to guess whether a solution works, and guesses
-wrong in the direction of whatever the candidate asserted. This one runs it and
-reads the output before responding.
+The model gets one tool: running the candidate's code in the sandbox. Without
+it, the interviewer would just have to trust that the code works.
 
-The loop is the standard tool-use cycle: send the conversation, execute any
-tool calls the model returns, append the results, repeat until it answers with
-text instead of another call.
+Standard tool-use loop: send the conversation, run any tool calls, append the
+results, repeat until the model replies with text.
 """
 
 import json
@@ -19,8 +15,8 @@ from sandbox import run_sandboxed
 from runner import prepare_java_source
 from sandbox import cpp_compile_and_run, java_compile_and_run
 
-# A model that keeps calling tools forever would bill indefinitely, so the
-# cycle is bounded. Three is enough to run code, see it fail, and run a fix.
+# Cap the tool loop so a model that keeps calling tools can't run up the bill.
+# Three is enough to run code, see it fail, and run a fix.
 MAX_TOOL_ROUNDS = 5
 
 SYSTEM = """\
@@ -56,8 +52,8 @@ RUN_CODE_TOOL = {
 
 
 def run_code_tool(code: str, language: str) -> str:
-    """The tool body. Untrusted in both directions: the candidate wrote the
-    code, and the model chose when to run it."""
+    """Runs the candidate's code. Untrusted either way: the candidate wrote
+    it and the model decided when to run it."""
     if language == "cpp":
         res = run_sandboxed("cpp", {"solution.cpp": code}, cpp_compile_and_run())
     elif language == "java":
@@ -80,9 +76,8 @@ def interview_turn(history: list, message: str, model: str = None) -> dict:
     """
     Advance the interview by one candidate message.
 
-    Returns the reply plus the updated history, so the caller stays stateless —
-    conversation state lives with the client rather than in a server-side
-    dictionary that a restart would drop.
+    Returns the reply and the updated history. The client holds the
+    conversation, so nothing is lost if the server restarts.
     """
     client = get_client()
     messages = [{"role": "system", "content": SYSTEM}] + list(history)
@@ -125,7 +120,7 @@ def interview_turn(history: list, message: str, model: str = None) -> dict:
                               "result": json.loads(result)})
             messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
 
-    # Out of rounds: report it rather than silently returning the last tool output.
+    # Out of rounds: say so instead of returning the last tool output.
     return {
         "reply": "The interviewer got stuck running code. Try rephrasing.",
         "history": history,

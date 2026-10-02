@@ -29,8 +29,8 @@ def run(code, **limit_overrides):
 
 
 class TestManifest:
-    """The security-relevant fields are asserted directly, so a careless edit
-    to the manifest fails here rather than silently widening the sandbox."""
+    """Check the security fields directly so a bad edit to the manifest fails
+    here instead of quietly loosening the sandbox."""
 
     def setup_method(self):
         raw = sandbox_k8s._job_manifest("j", IMAGE, ["h.py"], DEFAULT_LIMITS, {})
@@ -39,8 +39,8 @@ class TestManifest:
         self.container = self.pod["containers"][0]
 
     def test_the_runner_gets_no_api_credentials(self):
-        """Untrusted code must not be handed a token for the API that is
-        running it — this has no Docker equivalent."""
+        """Untrusted code shouldn't get a token for the API running it. Docker
+        has no equivalent for this."""
         assert self.pod["automountServiceAccountToken"] is False
 
     def test_the_container_is_unprivileged(self):
@@ -64,8 +64,8 @@ class TestManifest:
             "resources"]["limits"]["memory"] == "333Mi"
 
     def test_the_runner_is_labelled_for_the_network_policy(self):
-        """The NetworkPolicy selects on this label. Losing it would silently
-        remove the egress ban rather than fail loudly."""
+        """The NetworkPolicy selects on this label. Without it the egress ban
+        silently stops applying."""
         assert self.pod_labels()[sandbox_k8s.RUNNER_LABEL] == "true"
 
     def pod_labels(self):

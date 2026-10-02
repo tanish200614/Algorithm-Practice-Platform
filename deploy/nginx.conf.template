@@ -1,7 +1,7 @@
-# Rendered at container start by the nginx image's entrypoint, which runs
-# envsubst over /etc/nginx/templates/*.template. It only substitutes names that
-# are actually set in the environment, so nginx's own $host / $http_upgrade
-# variables pass through untouched — only ${BACKEND_HOST} is replaced.
+# Rendered at container start by the nginx image's entrypoint (envsubst over
+# /etc/nginx/templates/*.template). It only replaces variables that are set,
+# so nginx's own $host and $http_upgrade are left alone and only
+# ${BACKEND_HOST} gets replaced.
 
 # WebSocket upgrades need Connection: upgrade when the client asks for it and
 # Connection: close otherwise; a hardcoded "upgrade" breaks plain HTTP requests.
@@ -36,8 +36,7 @@ server {
         add_header Cache-Control "no-cache";
     }
 
-    # Every API route sits under one prefix, so this is the only backend rule
-    # that has to exist — and the only one to keep in sync when routes change.
+    # All API routes are under /api, so this is the only backend rule needed.
     location /api/ {
         proxy_pass http://backend;
         proxy_http_version 1.1;

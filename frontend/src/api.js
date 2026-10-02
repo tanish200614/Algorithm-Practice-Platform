@@ -1,17 +1,15 @@
 // Where the backend lives.
 //
-// Dev points at uvicorn directly. The container build sets VITE_API_URL to an
-// empty string, which makes every path same-origin so nginx can proxy it —
-// that way the image works behind any hostname or load balancer without being
-// rebuilt for each environment.
+// In dev this points at uvicorn. The container build sets VITE_API_URL to an
+// empty string so every request is same-origin and nginx proxies it. That way
+// the same image works behind any hostname without a rebuild.
 const RAW = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000/api";
 
 export const API = RAW.replace(/\/+$/, "");
 
 export function wsUrl(path, token) {
-  // API may be absolute (dev, pointing at uvicorn) or a same-origin path like
-  // "/api" (the container build). Resolve both to an absolute ws:// URL, and
-  // keep the base's own path — overwriting pathname outright would drop the
+  // API is either absolute (dev, uvicorn) or a same-origin path like "/api"
+  // (container build). Turn both into an absolute ws:// URL and keep the
   // "/api" prefix.
   const absolute = /^https?:/.test(API) ? API : `${window.location.origin}${API}`;
   const url = new URL(absolute);

@@ -9,10 +9,9 @@ def detect_compiler(name):
 
 def language_available(lang_id: str) -> bool:
     """
-    A language is usable if the sandbox can run it. With Docker up that means
-    the image exists; on the host fallback it means the toolchain is installed
-    locally. Checked per request rather than at import, so building the images
-    or starting the daemon takes effect without a backend restart.
+    A language is usable if the sandbox can run it: the Docker image exists,
+    or on the host fallback, the toolchain is installed. Checked per request so
+    building images or starting Docker works without restarting the backend.
     """
     compiler = LANGUAGES[lang_id].get("compiler")
     if compiler is None:

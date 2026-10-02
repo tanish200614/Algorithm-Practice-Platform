@@ -1,6 +1,6 @@
-# The API creates one Job per submission, so it needs API access — but only to
-# the objects it actually creates, and only in its own namespace. A Role rather
-# than a ClusterRole, and no verbs on secrets, pods/exec or anything else.
+# The API creates one Job per submission, so it needs some API access, but
+# only for the objects it creates and only in its own namespace. Role instead
+# of ClusterRole, and no access to secrets, pods/exec, or anything else.
 apiVersion: v1
 kind: ServiceAccount
 metadata:

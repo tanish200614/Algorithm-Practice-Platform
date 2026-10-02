@@ -21,7 +21,7 @@ def _tokenize(code: str) -> list:
 # ── Heuristic approach labeling ────────────────────────────────────────────────
 
 _APPROACH_KEYWORDS = {
-    # Only actual data-structure names/methods — not variable names like 'complement'
+    # Only real data structure names/methods, not variable names like 'complement'
     "Hash Map": {
         'dict', 'hashmap', 'unordered_map', 'seen', 'memo',
         'cache', 'defaultdict', 'counter', 'hashtable',
@@ -228,9 +228,8 @@ class EloTracker:
     def __init__(self):
         self._skills: dict = {}
         self._difficulties: dict = dict(self._INITIAL_DIFFICULTIES)
-        # Keyed by player name. Distinct from _attempts, which is keyed by
-        # problem — conflating the two made the difficulty blend below a
-        # no-op, since a problem id is never a key in here.
+        # Keyed by player name. _attempts is keyed by problem. Mixing the two
+        # up broke the difficulty blend below.
         self._solve_counts: dict = defaultdict(int)
         self._attempts: dict = defaultdict(int)     # problem_id -> times rated
 
@@ -241,8 +240,8 @@ class EloTracker:
         return self._difficulties.get(problem_id, self.DEFAULT)
 
     def get_attempts(self, problem_id: str) -> int:
-        """How many rated attempts a problem has seen — the confidence behind
-        its ELO difficulty."""
+        """How many rated attempts a problem has. Used to decide how much to
+        trust its ELO difficulty."""
         return self._attempts[problem_id]
 
     def tier(self, name: str) -> str:
@@ -318,7 +317,7 @@ class SolveTimeTracker:
 
 class DifficultyEstimator:
     """
-    Estimates problem difficulty (1–10) from its description text using
+    Estimates problem difficulty (1 to 10) from its description text using
     weighted keyword/structural features. Blends with ELO-derived difficulty
     once enough solve data exists.
     """
@@ -353,9 +352,8 @@ class DifficultyEstimator:
             # ELO starts at 1000; map [800, 1300] → [1, 10]
             elo_score = round((elo_diff - 800) / 50 + 1)
             elo_score = min(10, max(1, elo_score))
-            # Attempts on this problem, not solves by some player of the same
-            # name: _solve_counts is keyed by player, so the old lookup was
-            # always 0 and the ELO term never carried any weight at all.
+            # Use attempts on this problem. _solve_counts is keyed by player, so
+            # the old lookup always returned 0 and ELO never counted.
             attempts = elo.get_attempts(problem_id)
             weight = min(attempts / 20, 0.8)  # ELO reaches 80% weight at 20 attempts
             final_score = round(weight * elo_score + (1 - weight) * text_score)

@@ -1,8 +1,7 @@
 # Static frontend, built once and served by nginx.
 #
-# VITE_API_URL is baked in at build time as "/api", so the bundle always talks
-# to its own origin. That means this image runs unchanged behind any hostname
-# or load balancer — no per-environment rebuild.
+# VITE_API_URL is set to "/api" at build time, so the bundle always talks to
+# its own origin and the image works behind any hostname without a rebuild.
 FROM node:22-alpine AS build
 
 WORKDIR /app

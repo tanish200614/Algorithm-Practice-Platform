@@ -14,14 +14,11 @@ from database import all_problem_stats, all_stats, init_db
 from ml import elo
 from sandbox import sandbox_status
 
-# Everything the API serves lives under one prefix so a reverse proxy has a
-# single route to forward, instead of a list of top-level paths that has to be
-# kept in sync with the router every time an endpoint is added.
+# Everything is under one prefix so a reverse proxy only needs one rule.
 API_PREFIX = "/api"
 
-# In production the frontend is served from the same origin, so no cross-origin
-# grant is needed at all. ALLOWED_ORIGINS exists for split deployments; the
-# default is the local Vite dev server rather than "*".
+# In production the frontend is on the same origin, so CORS isn't needed.
+# ALLOWED_ORIGINS is for split deployments and defaults to the Vite dev server.
 ALLOWED_ORIGINS = [
     o.strip()
     for o in os.environ.get("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
@@ -38,8 +35,8 @@ async def lifespan(_app: FastAPI):
         elo._skills[row["username"]] = row["skill"]
         elo._solve_counts[row["username"]] = row["solves"]
 
-    # Restoring skills without difficulties would hand players ratings earned
-    # against a scale that no longer exists.
+    # Load difficulties too, otherwise ratings won't match the problems they
+    # were earned against.
     for row in all_problem_stats():
         elo._difficulties[row["problem_id"]] = row["difficulty"]
         elo._attempts[row["problem_id"]] = row["attempts"]
@@ -54,9 +51,8 @@ async def lifespan(_app: FastAPI):
     if status["isolated"]:
         print(f"[sandbox] isolating submissions via {status['detail']}")
     else:
-        # Name the languages rather than saying nothing is isolated: in
-        # "partial" mode some of them are, and a blanket warning is both
-        # alarming and inaccurate.
+        # List the languages instead of saying nothing is isolated, since in
+        # "partial" mode some of them are.
         loose = [lang for lang, ok in status["languages"].items() if not ok]
         safe = [lang for lang, ok in status["languages"].items() if ok]
         print(
@@ -88,5 +84,5 @@ app.include_router(tournament_router, prefix=API_PREFIX)
 
 @app.get("/health")
 def health():
-    """Unprefixed so a load balancer health check needs no path rewriting."""
+    """No /api prefix so load balancer health checks work without rewriting."""
     return {"status": "ok", "sandbox": sandbox_status()["mode"]}

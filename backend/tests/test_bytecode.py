@@ -54,8 +54,8 @@ class TestParsing:
         assert methods[0]["instructions"] == 4
 
     def test_the_implicit_constructor_is_not_shown(self):
-        """javac synthesises a no-arg constructor. It is scaffolding, not the
-        player's work, and listing it just pads the output."""
+        """javac adds a no-arg constructor. The player didn't write it, so
+        don't list it."""
         assert all("Solution()" not in m["signature"] for m in parse_bytecode_methods(SAMPLE))
 
     def test_a_listing_with_no_methods_yields_nothing(self):
@@ -86,8 +86,8 @@ class TestCompilation:
         assert "Code:" in listing
 
     def test_a_hashmap_solution_shows_its_boxing(self):
-        """The point of the viewer: make the hidden cost of Map<Integer,Integer>
-        visible, since it is the usual reason a Java answer trails a C++ one."""
+        """Map<Integer,Integer> boxing is the usual reason a Java answer is
+        slower than C++, so the viewer should point it out."""
         listing, _ = compile_to_bytecode(TWO_SUM)
         assert any("autoboxing" in i["label"] for i in bytecode_insights(listing))
 
@@ -99,8 +99,7 @@ class TestCompilation:
 
 class TestInsightScoping:
     def test_the_synthetic_constructor_contributes_no_counts(self):
-        """javac's implicit constructor contains an invokespecial. Counting it
-        made a submission of pure arithmetic report a method invocation it
-        never wrote."""
+        """javac's implicit constructor has an invokespecial. Counting it made
+        pure arithmetic look like it called a method."""
         insights = bytecode_insights(SAMPLE)
         assert not any("invocation" in i["label"] for i in insights)

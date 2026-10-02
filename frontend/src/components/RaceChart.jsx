@@ -15,11 +15,10 @@ export const MY_COLOR = "#00ff88";
 export const THEM_COLOR = "#ff3c6e";
 
 /**
- * Runtime against input size for both players.
+ * Runtime vs input size for both players.
  *
- * The chart instance is kept in a ref and mutated in place: results stream in
- * one player at a time, and recreating the chart on every message would throw
- * away the other player's curve mid-race.
+ * The chart is kept in a ref and updated in place. Results come in one player
+ * at a time, so recreating it on each message would wipe the other curve.
  */
 export default function RaceChart({ players, series, placeholder }) {
   const canvasRef = useRef(null);

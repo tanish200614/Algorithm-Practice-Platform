@@ -1,9 +1,9 @@
 """
 Interviewer tool-use loop.
 
-The loop is driven by a stub client, so the cycle — propose a tool call, run
-it, feed the result back, answer — is asserted without an API key or a network
-call. The tool body itself runs real code in the sandbox.
+Uses a stub client, so the loop (tool call, run it, feed back the result,
+answer) is tested without an API key or network. The tool itself runs real
+code in the sandbox.
 """
 
 import json
@@ -84,8 +84,8 @@ class TestLoop:
         assert len(client.seen) == 1
 
     def test_a_tool_call_is_executed_and_fed_back(self, stub):
-        """The cycle that makes the interviewer useful: it runs the candidate's
-        code and sees the real output before replying."""
+        """The interviewer runs the candidate's code and sees the real output
+        before replying."""
         client = stub([
             _msg(tool_calls=[_tool_call("call_1", "print(6*7)")]),
             _msg(content="That prints 42, so it works."),
@@ -103,8 +103,8 @@ class TestLoop:
         assert tool_msg[0]["tool_call_id"] == "call_1"
 
     def test_history_grows_by_the_exchange_only(self, stub):
-        """Tool traffic stays out of the returned history; the client should
-        carry the conversation, not the scaffolding."""
+        """Tool calls stay out of the returned history. The client only needs
+        the conversation."""
         stub([_msg(tool_calls=[_tool_call("c", "print(1)")]),
               _msg(content="ok")])
         out = interview_turn([], "check this")
@@ -114,7 +114,7 @@ class TestLoop:
         ]
 
     def test_a_model_that_never_stops_calling_tools_is_cut_off(self, stub):
-        """Otherwise a looping model bills indefinitely."""
+        """Otherwise a model stuck in a loop keeps costing money."""
         stub([_msg(tool_calls=[_tool_call(f"c{i}", "print(1)")])
               for i in range(MAX_TOOL_ROUNDS + 2)])
         out = interview_turn([], "go")

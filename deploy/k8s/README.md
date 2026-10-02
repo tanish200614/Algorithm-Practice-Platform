@@ -17,7 +17,7 @@ no pod mounts a runtime socket at all.
 | --- | --- |
 | `--network none` | NetworkPolicy denying all egress |
 | `--memory` / `--cpus` | `resources.limits` |
-| `--pids-limit` | *(no equivalent — see Gaps)* |
+| `--pids-limit` | *(no equivalent, see Gaps)* |
 | `--user 10001` | `securityContext.runAsUser` |
 | `--cap-drop ALL` | `capabilities.drop: [ALL]` |
 | `--security-opt no-new-privileges` | `allowPrivilegeEscalation: false` |
@@ -32,7 +32,7 @@ credentials for the API that is running it.
 
 `--network none` is enforced by the container runtime. A NetworkPolicy is
 enforced by the **CNI plugin**, and a CNI that does not implement NetworkPolicy
-accepts the object and ignores it — no error, no warning, no enforcement.
+accepts the object and ignores it. No error, no warning, no enforcement.
 
 kind's default CNI (kindnet) is one of those. Measured directly:
 
@@ -43,7 +43,7 @@ Calico:   egress from runner pod -> blocked
 
 So `kind-cluster.yaml` sets `disableDefaultCNI: true` and Calico is installed
 in its place. On a managed cluster check the provider's CNI actually enforces
-policy — on EKS the default VPC CNI does not, without Calico installed
+policy. On EKS the default VPC CNI does not, without Calico installed
 alongside it.
 
 ## Running it locally
@@ -73,7 +73,7 @@ CI does exactly this on every change to the sandbox or these manifests.
 - **No pid ceiling.** `--pids-limit` has no pod-spec equivalent; capping
   processes needs a RuntimeClass or a kernel-level sandbox such as gVisor.
 - **Cold start.** A Job takes roughly 3.4 s end to end against ~150 ms for
-  `docker run` — scheduling, image pull check, and pod startup. Fine for a
+  `docker run` (scheduling, image pull check, and pod startup). Fine for a
   benchmark that already takes seconds; too slow for the "Test Run" button
   without a warm pool.
 - **SQLite on an emptyDir.** Ratings live only as long as the pod. Durability

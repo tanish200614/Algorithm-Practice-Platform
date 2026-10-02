@@ -1,10 +1,9 @@
 """
-Ad-hoc "test run" execution for the editor's Run button.
+Runs code for the editor's Run button.
 
-This is the shallow path — it runs whatever the user typed and hands back
-stdout/stderr. The benchmark path (benchmarks.py) is the one that measures
-scaling. Both go through sandbox.run_sandboxed; neither ever executes a
-submission in the backend process.
+Just runs what the user typed and returns stdout/stderr. Benchmarking is in
+benchmarks.py. Both go through sandbox.run_sandboxed, so submissions never
+run in the backend process.
 """
 
 import re
@@ -32,9 +31,9 @@ int main() {{
 }}
 """
 
-# java.util is imported for the same reason the C++ scaffold includes
-# <unordered_map>: essentially every real solution reaches for a collection,
-# and without it the submission fails to compile with "cannot find symbol".
+# Import java.util for the same reason the C++ scaffold includes
+# <unordered_map>: almost every solution uses a collection and won't compile
+# without it.
 JAVA_SCAFFOLD = """\
 import java.util.*;
 
@@ -63,9 +62,8 @@ def _result(res, language: str) -> dict:
         "compile_error": res.compile_failed,
         "timed_out": res.timed_out,
         "oom_killed": res.oom_killed,
-        # The UI shows the ceiling the submission ran under rather than a
-        # memory reading. Peak RSS was previously sampled after the process
-        # had already exited, which reported a meaningless number.
+        # Show the memory limit instead of a measured value. We used to sample
+        # peak RSS after the process had already exited, which was meaningless.
         "memory_limit_mb": limits.memory_mb,
         "time_limit_s": limits.wall_clock_s,
         "isolated": res.isolated,
@@ -85,11 +83,11 @@ def run_cpp(code: str) -> dict:
 
 def prepare_java_source(code: str, scaffold: str = None) -> tuple:
     """
-    Wrap a Java submission into a compilable file; returns (source, class_name).
+    Wrap a Java submission in a class; returns (source, class_name).
 
-    Submissions are bare methods, so they need a class around them. One that
-    brings its own `public class` is used verbatim, but its name still has to
-    be recovered — javac requires the filename to match the public class.
+    Submissions are usually bare methods. If one has its own `public class`
+    it's used as is, but we still need the name since javac wants the
+    filename to match.
     """
     if "public class" in code:
         match = re.search(r"public\s+class\s+(\w+)", code)

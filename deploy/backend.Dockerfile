@@ -1,13 +1,12 @@
 # API server.
 #
-# This image ships the Docker *client* but no daemon: the backend launches
-# sandbox containers as siblings on the host's daemon through a mounted
-# socket. See deploy/README.md — that socket is host-root-equivalent, which is
-# why the API runs on its own instance rather than sharing one.
+# Ships the Docker client but no daemon. The backend starts sandbox containers
+# on the host's daemon through a mounted socket. That socket is basically root
+# on the host (see deploy/README.md), which is why the API gets its own
+# instance.
 
-# Take the CLI from the official image rather than Debian's docker.io package:
-# that package is built around the daemon, and on slim it does not leave a
-# usable /usr/bin/docker behind. This is a pinned, single static binary.
+# Take the CLI from the official image, not Debian's docker.io package, which
+# doesn't leave a usable /usr/bin/docker on slim. It's a single static binary.
 FROM docker:27-cli AS dockercli
 
 FROM python:3.12-slim

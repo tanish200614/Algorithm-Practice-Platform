@@ -1,12 +1,11 @@
 # Sandbox image for untrusted C++ submissions.
 #
-# Carries a compiler because submissions are compiled inside the sandbox
-# too — a hostile #include or a compile-time bomb should not reach the host.
+# Has a compiler because submissions are compiled inside the sandbox too, so
+# a nasty #include or compile-time bomb never touches the host.
 FROM gcc:13-bookworm
 
-# A high uid so it cannot collide with a user the base image already
-# ships — the eclipse-temurin base owns 1000 as "ubuntu", and useradd
-# fails the build on that collision.
+# High uid so it doesn't clash with an existing user in the base image
+# (eclipse-temurin already has 1000 as "ubuntu" and useradd fails on it).
 RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin sandbox
 
 RUN mkdir -p /work && chmod 1777 /work

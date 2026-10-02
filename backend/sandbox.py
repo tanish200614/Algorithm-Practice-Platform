@@ -1,16 +1,15 @@
 """
-Isolation layer for untrusted code.
+Sandbox for running untrusted code.
 
-Every submission the platform runs — ad-hoc test runs, benchmark harnesses,
-assembly dumps — goes through `run_sandboxed`. The primary path puts the code
-in a throwaway per-language container with no network, dropped capabilities,
-an unprivileged uid, and hard CPU / memory / process / wall-clock ceilings.
+Every submission (test runs, benchmarks, assembly dumps) goes through
+`run_sandboxed`. Normally that means a throwaway per-language container with
+no network, no capabilities, a non-root user, and limits on CPU, memory,
+processes and wall-clock time.
 
-If the Docker daemon or the sandbox images are unavailable (a laptop with
-Docker Desktop closed, say) it degrades to running on the host under POSIX
-rlimits. That fallback is *weaker* — it constrains resources but does not
-isolate the filesystem or the network — so it is meant for local development
-only, and `sandbox_status()` reports which mode is live.
+If Docker or the images aren't available (e.g. Docker Desktop is closed), it
+falls back to running on the host with POSIX rlimits. That limits resources
+but doesn't isolate the filesystem or network, so it's only for local dev.
+`sandbox_status()` tells you which mode is active.
 """
 
 import os
@@ -31,15 +30,15 @@ COMPILE_ERROR_EXIT = 91
 # eclipse-temurin base already owns 1000.
 SANDBOX_UID = 10001
 
-# Seconds of CPU time granted beyond the wall-clock budget on the host
-# fallback, so the wall clock is what actually decides a timeout.
+# Extra CPU seconds on top of the wall-clock budget on the host fallback, so
+# the wall clock is what triggers a timeout.
 CPU_LIMIT_HEADROOM_S = 5
 
 SANDBOX_TAG = os.environ.get("SANDBOX_TAG", "latest")
 
-# Every value sandbox_status()["mode"] can take. Exported so callers and tests
-# reference one definition — a new mode was added once without the test that
-# enumerates them being updated, and CI was the only environment that hit it.
+# Every possible value of sandbox_status()["mode"]. Callers and tests use this
+# so adding a mode can't leave a test out of date (happened once, only CI
+# caught it).
 SANDBOX_MODES = frozenset({"docker", "k8s", "partial", "host-rlimit", "unavailable"})
 
 IMAGES = {
@@ -48,13 +47,12 @@ IMAGES = {
     "java": f"algobattle-sandbox-java:{SANDBOX_TAG}",
 }
 
-# auto    — prefer Docker, fall back to host rlimits (development)
-# docker  — Docker only; refuse the host fallback
-# k8s     — run each submission as a Kubernetes Job; no runtime socket anywhere
+# auto:   prefer Docker, fall back to host rlimits (development)
+# docker: Docker only, no host fallback
+# k8s:    run each submission as a Kubernetes Job, no runtime socket anywhere
 #
-# Anything but "auto" refuses to fall back, which is the right setting in a
-# deployed environment: silently running untrusted code on the host is much
-# worse than failing the request.
+# Anything except "auto" won't fall back. Use that when deployed, since
+# failing the request beats running untrusted code on the host.
 SANDBOX_MODE = os.environ.get("SANDBOX_MODE", "auto").lower()
 
 
@@ -100,10 +98,9 @@ class SandboxResult:
 # ── Docker availability (cached, but re-checked so a later `docker start`
 #    is picked up without restarting the backend) ────────────────────────────
 
-# None means "never probed". A 0.0 timestamp would not work as the sentinel:
-# time.monotonic() can start near zero, so a fresh process would read the
-# sentinel as a still-valid "unavailable" result and quietly take the host
-# fallback without ever asking the daemon.
+# None means "never checked". Can't use 0.0 because time.monotonic() can start
+# near zero, which would look like a fresh "unavailable" result and skip the
+# Docker check entirely.
 _probe_cache = None
 _PROBE_TTL_S = 30.0
 
@@ -143,10 +140,9 @@ def docker_available(language: str = None) -> bool:
     """
     Whether the sandbox can isolate `language` (or anything, if None).
 
-    Availability is per-language on purpose. Treating a single missing image as
-    "Docker is unavailable" would drop *every* language to unisolated host
-    execution — including the ones whose image is sitting right there — which
-    is the wrong direction to fail in for untrusted code.
+    Checked per language on purpose. If one missing image counted as "Docker
+    unavailable", every language would drop to running unisolated on the host,
+    even the ones whose images are there.
     """
     global _probe_cache
     if _probe_cache is None or time.monotonic() - _probe_cache[0] >= _PROBE_TTL_S:
@@ -221,12 +217,10 @@ def _docker_create_argv(image: str, limits: Limits, name: str, command: list) ->
     return [
         "docker", "create",
         "--name", name,
-        # No route to anything: no exfiltration, no fetching a payload, no
-        # hammering someone else's host from our IP.
+        # No network, so no sending data out or downloading anything.
         "--network", "none",
-        # A submission that allocates without bound is killed rather than
-        # taking the machine down. memory-swap == memory disables swap, so the
-        # limit is real instead of just slow.
+        # Kill runaway allocations instead of letting them take down the
+        # machine. memory-swap == memory disables swap so the limit holds.
         "--memory", f"{limits.memory_mb}m",
         "--memory-swap", f"{limits.memory_mb}m",
         "--cpus", str(limits.cpus),
@@ -283,8 +277,8 @@ def _run_docker(language: str, files: dict, command: list, limits: Limits) -> Sa
             )
             stdout, stderr, exit_code = proc.stdout, proc.stderr, proc.returncode
         except subprocess.TimeoutExpired as e:
-            # `docker start` giving up does not stop the container — kill it,
-            # or the submission keeps burning its CPU share indefinitely.
+            # Docker giving up doesn't stop the container, so kill it or it
+            # keeps using CPU forever.
             timed_out = True
             subprocess.run(["docker", "kill", name], capture_output=True, timeout=15)
             stdout = _as_text(e.stdout)
@@ -322,36 +316,28 @@ _IS_DARWIN = platform.system() == "Darwin"
 def _rlimit_preexec(limits: Limits, language: str):
     """Applied in the child between fork and exec."""
     def apply():
-        # RLIMIT_CPU is a backstop, not the timeout. Set to the wall-clock
-        # budget it becomes a coin flip for anything CPU-bound: a busy loop
-        # burns CPU as fast as wall time, so the two fire together and
-        # whichever wins decides whether the run is reported as a timeout or
-        # as an unexplained kill. Headroom makes the wall clock authoritative
-        # and leaves this to catch only the pathological cases.
+        # RLIMIT_CPU is just a backstop. If it equals the wall-clock budget, a
+        # busy loop hits both at once and it's random whether you get a
+        # timeout or an unexplained kill. The headroom makes the wall clock win.
         cpu_s = max(1, int(limits.wall_clock_s) + CPU_LIMIT_HEADROOM_S)
         resource.setrlimit(resource.RLIMIT_CPU, (cpu_s, cpu_s))
         resource.setrlimit(
             resource.RLIMIT_FSIZE, (limits.output_bytes * 4, limits.output_bytes * 4)
         )
 
-        # Address space. Two platforms have to be treated differently:
-        #   - macOS counts the interpreter's own reserved mappings against
-        #     RLIMIT_AS, so any limit small enough to be useful kills the child
-        #     before it can exec. There is no working equivalent, which is one
-        #     more reason the host path is development-only.
-        #   - The JVM reserves a huge virtual range up front and refuses to
-        #     start under RLIMIT_AS at all.
+        # Address space limits:
+        #   - macOS counts the interpreter's own reserved memory against
+        #     RLIMIT_AS, so any useful limit kills the child before it starts.
+        #   - The JVM reserves a huge virtual range up front and won't start
+        #     under RLIMIT_AS at all.
         if not _IS_DARWIN and language != "java":
             addr = limits.memory_mb * 1024 * 1024
             resource.setrlimit(resource.RLIMIT_AS, (addr, addr))
 
-        # RLIMIT_NPROC is deliberately not set. It is per-real-UID on every
-        # platform, not per-process: it counts every process the invoking user
-        # already owns, so a value low enough to stop a fork bomb also stops
-        # the compiler from forking on any machine with a busy session — and
-        # one high enough to be safe stops nothing. The pid ceiling is a
-        # container-only guarantee (--pids-limit), which is one more reason
-        # this path is development-only.
+        # RLIMIT_NPROC isn't set on purpose. It counts every process the user
+        # owns, not just this one, so a limit low enough to stop a fork bomb
+        # also stops the compiler on a busy machine. The pid limit only exists
+        # in the container (--pids-limit).
 
         # New session, so a timeout can take the whole process group down
         # rather than leaving orphaned children spinning.
@@ -386,9 +372,8 @@ def _run_host(language: str, files: dict, command: list, limits: Limits) -> Sand
             exit_code = proc.returncode
         except subprocess.TimeoutExpired:
             timed_out = True
-            # The child called setsid(), so signal the whole group — killing
-            # only the direct child would leave a compiler or a JVM it spawned
-            # running.
+            # The child called setsid(), so kill the whole group. Killing just
+            # the child would leave a compiler or JVM it started running.
             _kill_process_group(proc)
             stdout, stderr = proc.communicate()
             stderr = stderr or f"Wall-clock limit of {limits.wall_clock_s:g}s exceeded"

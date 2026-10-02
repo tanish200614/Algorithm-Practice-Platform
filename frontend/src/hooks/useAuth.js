@@ -18,9 +18,8 @@ function readStored() {
 
 export function useAuth() {
   const [session, setSession] = useState(readStored);
-  // Until the stored token has been checked against the server we don't know
-  // whether it is still good, so the app renders nothing rather than flashing
-  // the lobby and bouncing back to the login screen.
+  // Until the saved token is checked we don't know if it's still valid, so
+  // render nothing instead of flashing the lobby and bouncing to login.
   const [checking, setChecking] = useState(() => Boolean(readStored()));
 
   const save = useCallback((token, username) => {
@@ -55,8 +54,7 @@ export function useAuth() {
       })
       .catch((err) => {
         if (cancelled) return;
-        // A network blip shouldn't discard a valid login — only an outright
-        // rejection from the server should.
+        // Don't log out on a network blip, only when the server rejects the token.
         if (err.status === 401) clear();
         setChecking(false);
       });

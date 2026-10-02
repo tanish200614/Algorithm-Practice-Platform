@@ -37,8 +37,8 @@ export default function App() {
 
   const room = useBattleRoom(battle?.roomCode ?? null, token);
 
-  // Both players are in — move from the waiting room into the arena. The delay
-  // lets the waiting screen show the opponent's name before it disappears.
+  // Both players are in, so move to the arena. The delay lets the waiting
+  // screen show the opponent's name first.
   useEffect(() => {
     if (screen !== "waiting" || room.players.length < 2) return undefined;
     const t = setTimeout(() => setScreen("battle"), 800);

@@ -1,13 +1,12 @@
 """
 Kubernetes execution backend.
 
-The Docker backend starts sibling containers through /var/run/docker.sock,
-which is root-equivalent on the host: a container escape in the API owns the
-node. That is acceptable on a laptop and uncomfortable in a cluster, so under
-Kubernetes a submission becomes a Job created through the API instead, and no
-pod ever touches a container runtime socket.
+The Docker backend starts containers through /var/run/docker.sock, which is
+basically root on the host. Fine on a laptop, not great in a cluster. Here
+each submission runs as a Job created through the API instead, so no pod ever
+touches a container runtime socket.
 
-Every guarantee the Docker backend makes has a direct equivalent here:
+How the Docker settings map over:
 
     --network none              NetworkPolicy denying all egress
     --memory / --cpus           resources.limits
@@ -16,8 +15,8 @@ Every guarantee the Docker backend makes has a direct equivalent here:
     --security-opt no-new-priv  allowPrivilegeEscalation: false
     host-side timeout kill      activeDeadlineSeconds
 
-Plus one the Docker backend cannot express: the runner pod mounts no service
-account token, so code that does reach the network finds no API to call.
+The runner pod also mounts no service account token, so even if code reaches
+the network there's no API it can call.
 """
 
 import json
@@ -28,8 +27,8 @@ import uuid
 
 NAMESPACE = os.environ.get("SANDBOX_NAMESPACE", "algobattle")
 
-# Label every object this module creates, so a sweep can find orphans left by
-# a backend that died mid-run without touching anything else in the namespace.
+# Label everything we create so leftovers from a crashed backend can be found
+# and cleaned up without touching anything else in the namespace.
 RUNNER_LABEL = "algobattle.io/runner"
 
 _KUBECTL_TIMEOUT_S = 30
@@ -55,9 +54,9 @@ def kubectl_available() -> bool:
 
 def _job_manifest(name: str, image: str, command: list, limits, files: dict) -> str:
     """
-    Build the Job. Files ride in as a ConfigMap projected at /work rather than
-    being baked into the command, so a submission containing quotes, newlines
-    or shell metacharacters cannot break out of its own argument.
+    Build the Job. Files are mounted from a ConfigMap at /work instead of
+    going in the command, so quotes or shell characters in a submission can't
+    break out.
     """
     container = {
         "name": "runner",
@@ -106,8 +105,7 @@ def _job_manifest(name: str, image: str, command: list, limits, files: dict) -> 
                 "metadata": {"labels": {RUNNER_LABEL: "true"}},
                 "spec": {
                     "restartPolicy": "Never",
-                    # Untrusted code must not be handed credentials for the API
-                    # that is running it.
+                    # Don't give untrusted code credentials for the API running it.
                     "automountServiceAccountToken": False,
                     "enableServiceLinks": False,
                     "containers": [container],

@@ -185,8 +185,7 @@ async def battle_ws(websocket: WebSocket, room_code: str,
                         elo_deltas[name] = elo.update(name, problem_id, solved)
                         upsert_stats(name, elo.get_skill(name), elo._solve_counts[name])
 
-                    # elo.update() moves the problem as well as the players, so
-                    # both halves of the pair are written in the same place.
+                    # elo.update() changes the problem rating too, so save both here.
                     upsert_problem_stats(
                         problem_id,
                         elo.get_difficulty(problem_id),

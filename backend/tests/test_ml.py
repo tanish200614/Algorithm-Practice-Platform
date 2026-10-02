@@ -102,9 +102,8 @@ class TestDifficultyBlending:
             "numbers that add up to the target.")
 
     def test_a_problem_everyone_fails_is_reported_harder(self):
-        """_solve_counts is keyed by player, so looking a problem id up in it
-        always returned 0 — the ELO term carried zero weight and the score
-        never moved off the text heuristic no matter what happened."""
+        """_solve_counts is keyed by player, so looking up a problem id always
+        returned 0 and the score never moved off the text heuristic."""
         elo, est = EloTracker(), DifficultyEstimator()
         before = est.score(self.DESC, "two_sum", elo)["score"]
 

@@ -14,8 +14,8 @@ Description: >-
   2. Battle rooms, the matchmaking queue, and tournament brackets are held in
      the API process's memory. Two players routed to different tasks would
      never see each other, so the API service is pinned to one task. Moving
-     that state to ElastiCache is the prerequisite for raising it — see
-     deploy/README.md.
+     that state to ElastiCache is the prerequisite for raising it (see
+     deploy/README.md).
 
 Parameters:
   VpcId:
@@ -42,7 +42,7 @@ Parameters:
     Type: String
     Default: ""
     Description: >-
-      ACM certificate for HTTPS. Leave empty to serve plain HTTP — acceptable
+      ACM certificate for HTTPS. Leave empty to serve plain HTTP. Fine
       for a demo, not for anything handling real passwords.
 
 Conditions:

@@ -1,14 +1,9 @@
 """
 OpenAI client with an on-disk response cache.
 
-Generation and interview turns are expensive and, at temperature 0, almost
-always repeats: the same problem topic asked twice should not cost twice. Every
-call is keyed by its full request — model, messages, tools, schema — so a cache
-hit is only ever returned for an identical request.
-
-The key deliberately includes the schema. A generated problem's shape is part
-of what was asked for, so changing the schema has to miss the cache rather than
-return something built for the old one.
+Generation and interview calls are expensive and mostly repeat at temperature
+0, so responses are cached. The key is the full request (model, messages,
+tools, schema), so changing the schema also misses the cache.
 """
 
 import hashlib
@@ -26,8 +21,7 @@ _client = None
 
 
 class LLMUnavailable(RuntimeError):
-    """Raised when no API key is configured, so callers can answer 503 rather
-    than 500 — a missing key is a deployment state, not a bug."""
+    """Raised when no API key is set, so callers can return 503 instead of 500."""
 
 
 def get_client():
@@ -93,9 +87,8 @@ def structured(messages: list, schema: dict, name: str, model: str = None,
     """
     One completion constrained to `schema`, returned as a dict.
 
-    json_schema with strict=True makes the model's output shape a guarantee
-    rather than something to defensively parse, which matters here because the
-    result is fed straight into a code-execution pipeline.
+    strict=True guarantees the output shape, which matters since the result
+    goes straight into code execution.
     """
     model = model or MODEL
     request = {

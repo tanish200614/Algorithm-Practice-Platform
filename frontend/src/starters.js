@@ -1,6 +1,5 @@
-// Starter stubs per problem and language. The benchmark harness splices the
-// submission in and calls exactly these names, so the signatures here are not
-// cosmetic — renaming one breaks the harness for that language.
+// Starter code per problem and language. The benchmark harness calls these
+// exact function names, so renaming one breaks the harness for that language.
 export const STARTERS = {
   two_sum: {
     python: `def two_sum(nums: list, target: int) -> list:\n    pass`,

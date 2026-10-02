@@ -1,7 +1,7 @@
 import sqlite3, os
 
-# Overridable so a deployment can point the database at a mounted volume;
-# otherwise it would live in the image layer and be lost on every redeploy.
+# Overridable so the db can live on a mounted volume. Otherwise it gets wiped
+# on every redeploy.
 DB_PATH = os.environ.get("DB_PATH") or os.path.join(os.path.dirname(__file__), "algobattle.db")
 
 

@@ -152,8 +152,8 @@ def get_assembly(req: AsmRequest):
     if err:
         return {"error": err[:500]}
 
-    # Benchmark the same solution at both optimisation levels so the
-    # assembly is paired with what it actually costs to run.
+    # Benchmark at both optimisation levels so you can see what the assembly
+    # actually costs to run.
     o0 = run_cpp_benchmark_with_opt(req.code, req.problem_id, 3000, "-O0")
     o2 = run_cpp_benchmark_with_opt(req.code, req.problem_id, 3000, "-O2")
 
@@ -179,7 +179,7 @@ class BytecodeRequest(BaseModel):
 
 @router.post("/bytecode")
 def get_bytecode(req: BytecodeRequest):
-    """The Java counterpart to /asm: what the JVM will actually execute."""
+    """Java version of /asm: shows the bytecode the JVM will run."""
     if not language_available("java"):
         return {"error": "No Java toolchain available on this server"}
 

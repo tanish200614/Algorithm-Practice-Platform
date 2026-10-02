@@ -1,9 +1,8 @@
 """
 Generated-problem validation.
 
-The point of the pipeline is that a model's problem is not trusted until its
-reference solution has been observed to satisfy its own test cases. These
-tests feed it problems that are broken in the ways generation actually breaks.
+A generated problem isn't trusted until its reference solution passes its own
+tests. These feed in problems broken the ways generation usually breaks them.
 """
 
 import pytest
@@ -38,8 +37,7 @@ GOOD = {
 
 class TestSchema:
     def test_strict_mode_forbids_extra_fields(self):
-        """strict json_schema is what makes the model's output shape a
-        guarantee instead of something to defensively parse."""
+        """strict json_schema is what guarantees the output shape."""
         assert PROBLEM_SCHEMA["additionalProperties"] is False
         assert "reference_solution" in PROBLEM_SCHEMA["required"]
 
@@ -51,8 +49,8 @@ class TestValidation:
         assert report["cases_passed"] == len(GOOD["test_cases"])
 
     def test_a_wrong_reference_solution_is_rejected(self):
-        """The failure that reading the JSON cannot catch: the solution looks
-        plausible and does not satisfy the problem's own tests."""
+        """The failure you can't see from the JSON: the solution looks fine
+        but fails the problem's own tests."""
         broken = {**GOOD, "reference_solution": REFERENCE.replace(
             "total += seen.get(k - v, 0)", "total += seen.get(k - v, 0) + 1")}
         ok, report = validate_problem(broken)

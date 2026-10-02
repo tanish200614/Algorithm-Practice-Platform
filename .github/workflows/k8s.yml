@@ -1,7 +1,7 @@
 name: Kubernetes
 
-# The Jobs sandbox is a security boundary, so its guarantees are asserted
-# against a real cluster on every change rather than trusted from a laptop run.
+# The Jobs sandbox is a security boundary, so test it against a real cluster
+# on every change.
 on:
   push:
     branches: [main]
@@ -45,8 +45,8 @@ jobs:
           kind version
 
       - name: Create cluster
-        # The config disables kindnet: it accepts NetworkPolicy and ignores it,
-        # which would make the egress test pass vacuously.
+        # The config disables kindnet because it ignores NetworkPolicy, which
+        # would make the egress test pass for no reason.
         run: kind create cluster --name algobattle --config deploy/k8s/kind-cluster.yaml --wait 120s
 
       - name: Install Calico so NetworkPolicy is actually enforced

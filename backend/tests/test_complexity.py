@@ -1,6 +1,6 @@
-"""The log-log regression is the platform's core claim — that it can tell a
-quadratic solution from a linear one from timing alone. These tests feed it
-synthetic timings with known exponents."""
+"""Tests for the log-log regression, which is how the platform tells a
+quadratic solution from a linear one using only timings. Uses fake timings
+with known exponents."""
 
 import math
 
@@ -33,8 +33,8 @@ def test_recovers_the_exponent(exponent, expected):
 
 
 def test_constant_factors_do_not_change_the_verdict():
-    """A slow O(n) solution must not be mistaken for a fast O(n²) one —
-    that is the whole reason the fit happens in log space."""
+    """A slow O(n) solution shouldn't be mistaken for a fast O(n²) one. That's
+    why the fit is done in log space."""
     slow_linear = detect_complexity(timings(1.0, constant=1.0))
     fast_quadratic = detect_complexity(timings(2.0, constant=1e-9))
     assert slow_linear["best"] == "O(n)"
@@ -63,8 +63,8 @@ def test_failed_runs_are_excluded():
 
 
 def test_predicts_a_quadratic_blowup_before_running_it():
-    """The early-timeout guard has to fire on a quadratic solution and stay
-    quiet on a linear one, or it either wastes a minute or lies."""
+    """The early timeout check should fire on a quadratic solution and not on
+    a linear one."""
     quadratic = timings(2.0, constant=1e-3)[:3]
     assert predict_next(quadratic, 15000)["will_timeout"] is True
 

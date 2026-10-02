@@ -4,13 +4,13 @@ const PAIRS = { "(": ")", "[": "]", "{": "}" };
 const CLOSERS = new Set([")", "]", "}"]);
 
 /**
- * A textarea with the editing affordances people expect from a code editor:
- * tab inserts spaces, brackets auto-close and wrap a selection, typing a
- * closer skips over one already there, backspace deletes an empty pair, and
- * Enter keeps the current indent (adding a level after `:` or `{`).
+ * A textarea that behaves like a basic code editor: tab inserts spaces,
+ * brackets auto-close and wrap a selection, typing a closer skips over an
+ * existing one, backspace deletes an empty pair, and Enter keeps the indent
+ * (adding a level after `:` or `{`).
  *
- * Every branch has to set the caret itself, because writing `value` through
- * React resets it to the end of the text.
+ * Every branch sets the caret itself because writing `value` through React
+ * moves it to the end.
  */
 export default function CodeEditor({ value, onChange, ...props }) {
   const handleKeyDown = useCallback(
@@ -23,12 +23,10 @@ export default function CodeEditor({ value, onChange, ...props }) {
 
       const apply = (next, caretStart, caretEnd = caretStart) => {
         e.preventDefault();
-        // Write the text and the caret straight to the DOM node, then tell
-        // React. Deferring the caret (to rAF or an effect) loses races against
-        // fast typing: the next keystroke reads a caret that has not been
-        // fixed up yet, so `print(6*7)` comes out as `print(*7)6`. Because the
-        // value React re-renders with is identical to what is already in the
-        // node, React leaves the selection alone.
+        // Write the text and caret straight to the DOM, then tell React.
+        // Setting the caret later (rAF or an effect) breaks with fast typing:
+        // `print(6*7)` turned into `print(*7)6`. React leaves the selection
+        // alone because the value it renders matches what's already there.
         ta.value = next;
         ta.setSelectionRange(caretStart, caretEnd);
         onChange(next);

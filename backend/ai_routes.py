@@ -1,4 +1,4 @@
-"""AI endpoints. A missing API key is a deployment state, so these answer 503."""
+"""AI endpoints. These return 503 if no API key is set."""
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -28,7 +28,7 @@ def generate(req: GenerateRequest, username: str = Depends(get_current_user)):
     except LLMUnavailable as e:
         raise HTTPException(503, str(e))
     except ValueError as e:
-        # Every attempt failed validation — a real outcome, not a server fault.
+        # Every attempt failed validation. That's a real result, not a server error.
         raise HTTPException(422, str(e))
 
 
