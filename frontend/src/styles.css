@@ -1873,3 +1873,159 @@ textarea::placeholder { color: var(--text-muted); }
   font-style: normal;
   font-weight: 600;
 }
+
+/* ── GITHUB LOGIN ── */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+.auth-divider::before,
+.auth-divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+
+.btn-github {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  text-decoration: none;
+  transition: border-color 0.15s;
+}
+.btn-github:hover { border-color: var(--text-muted); }
+
+/* ── AI PRACTICE ── */
+.ai-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+}
+
+.ai-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 24px;
+  min-height: 0;
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.ai-chat {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.ai-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+  padding: 24px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.ai-msg {
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.ai-msg--user { align-self: flex-end; border-color: rgba(0,255,136,0.3); }
+.ai-msg--assistant { align-self: flex-start; }
+.ai-msg-who {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 4px;
+}
+.ai-msg-body { white-space: pre-wrap; word-break: break-word; }
+.ai-typing { color: var(--text-muted); font-style: italic; }
+
+.ai-toolrun { margin-top: 8px; font-size: 12px; color: var(--accent3); }
+.ai-toolrun summary { cursor: pointer; }
+.ai-toolrun pre,
+.ai-problem pre {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: #0d0d14;
+  border-radius: 6px;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+}
+
+.ai-compose { display: flex; flex-direction: column; gap: 8px; }
+.ai-compose textarea {
+  min-height: 90px;
+  resize: vertical;
+  background: #0d0d14;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 10px 12px;
+  outline: none;
+}
+.ai-compose textarea:focus { border-color: var(--accent); }
+.ai-compose-actions { display: flex; gap: 8px; align-items: center; }
+.ai-compose-actions .btn-primary { margin: 0; width: auto; padding: 10px 20px; }
+
+.ai-gen-form { display: flex; gap: 8px; flex-wrap: wrap; }
+.ai-gen-form input { flex: 1; min-width: 200px; }
+.ai-gen-form .btn-primary { margin: 0; width: auto; padding: 10px 20px; }
+
+.ai-problem {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.ai-problem h3 { font-family: var(--display); font-size: 20px; }
+.ai-problem label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+.ai-problem summary { cursor: pointer; color: var(--accent3); }
+.ai-badge { color: var(--accent); font-size: 12px; }
+
+.ai-cache {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 8px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+@media (max-width: 600px) {
+  .solo-top-bar { flex-wrap: wrap; gap: 8px; padding: 12px 16px; }
+  .ai-panel { padding: 12px 16px; }
+  .ai-msg { max-width: 100%; }
+}

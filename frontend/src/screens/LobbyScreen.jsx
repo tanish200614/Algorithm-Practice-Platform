@@ -30,6 +30,7 @@ export default function LobbyScreen({
   onCreateRoom,
   onJoinRoom,
   onSolo,
+  onAi,
   onFindMatch,
   onHostTournament,
   onJoinTournament,
@@ -187,6 +188,13 @@ export default function LobbyScreen({
           <span>Just want to practice solo?</span>
           <button className="btn-ghost" onClick={onSolo}>
             Open Solo Editor →
+          </button>
+        </div>
+
+        <div className="solo-bar">
+          <span>Mock interview with an AI that runs your code, or generate new problems.</span>
+          <button className="btn-ghost" onClick={onAi}>
+            Open AI Practice →
           </button>
         </div>
 

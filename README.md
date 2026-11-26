@@ -35,6 +35,20 @@ solution looks like 12 others and that your opponent solved it differently.
 **Three languages.** Python, C++17, and Java, each with a hand-written
 benchmark harness per problem so the timings are comparable.
 
+**GitHub login and roles.** A Spring Boot service ([`auth-service/`](auth-service))
+runs the GitHub OAuth2 flow and issues HS256 JWTs signed with the key the
+FastAPI backend already verifies, so a GitHub user's token works everywhere
+with no OAuth code in Python. Spring Security enforces USER/ADMIN roles on the
+admin API, and FastAPI honours the same `roles` claim. Password login still
+works alongside it.
+
+**AI practice.** A mock interviewer that runs your code in the sandbox before
+judging it, and a problem generator (ADMIN only) that executes each generated
+reference solution against its own test cases and regenerates until they pass.
+Model responses are cached in Redis, and hits and misses are counted
+(`GET /api/ai/cache`), so the saving is a measured number. Both endpoints are
+rate-limited per user, also in Redis.
+
 ## Running untrusted code
 
 Every submission (test runs, benchmark harnesses, assembly dumps) goes
@@ -66,8 +80,10 @@ production image does) makes the backend fail the request instead.
 backend/     FastAPI: auth, rooms, matchmaking, tournaments,
              benchmarking, complexity detection, the sandbox
 frontend/    React + Vite single-page app
+auth-service/  Spring Boot: GitHub OAuth2 login, JWT issuing, role-based access
 sandbox/     One Dockerfile per language, plus build.sh
-deploy/      Application images, compose stack, and the AWS stack
+deploy/      Application images, compose stacks, free VM setup, AWS stack
+loadtest/    Concurrent-match WebSocket latency test
 ```
 
 Worth reading first: `backend/sandbox.py` for the isolation model,
@@ -90,10 +106,19 @@ cd backend && pip install -r requirements.txt && uvicorn main:app --reload
 cd frontend && npm install && npm run dev
 ```
 
+The GitHub login service is optional for local work (without it the GitHub
+button just doesn't show). To run it, use the same `SECRET_KEY` as the API:
+
+```bash
+cd auth-service && SECRET_KEY=$SECRET_KEY GITHUB_CLIENT_ID=... GITHUB_CLIENT_SECRET=... mvn spring-boot:run   # :8081
+```
+
 Tests:
 
 ```bash
 cd backend && python -m pytest
+cd auth-service && mvn test
+python loadtest/ws_load.py --matches 50 --secret $SECRET_KEY   # against a running API
 ```
 
 The isolation tests assert against real containers and skip when the images
@@ -101,7 +126,10 @@ aren't built, so run `sandbox/build.sh` first if you want the full suite.
 
 ## Deploying
 
-ECS behind an Application Load Balancer, described in
+**Free:** the frontend on Vercel and the backend on an Oracle Cloud Always Free
+VM, with HTTPS from Caddy. Step by step in [`deploy/vm/README.md`](deploy/vm/README.md).
+
+**AWS:** ECS behind an Application Load Balancer, described in
 [`deploy/aws/cloudformation.yml`](deploy/aws/cloudformation.yml). CI runs tests
 and builds images on every pull request; tagging a release pushes to ECR and
 rolls the services, waiting for them to stabilise before reporting success.

@@ -4,6 +4,7 @@ import { api, wsUrl } from "./api.js";
 import { useAuth } from "./hooks/useAuth.js";
 import { useBattleRoom } from "./hooks/useBattleRoom.js";
 import MatchmakingOverlay from "./components/MatchmakingOverlay.jsx";
+import AiScreen from "./screens/AiScreen.jsx";
 import AuthScreen from "./screens/AuthScreen.jsx";
 import BattleScreen from "./screens/BattleScreen.jsx";
 import LobbyScreen from "./screens/LobbyScreen.jsx";
@@ -225,6 +226,7 @@ export default function App() {
           onCreateRoom={createRoom}
           onJoinRoom={enterRoom}
           onSolo={() => setScreen("solo")}
+          onAi={() => setScreen("ai")}
           onFindMatch={findMatch}
           onHostTournament={hostTournament}
           onJoinTournament={joinTournament}
@@ -232,6 +234,8 @@ export default function App() {
       )}
 
       {screen === "solo" && <SoloScreen token={token} onBack={() => setScreen("lobby")} />}
+
+      {screen === "ai" && <AiScreen token={token} onBack={() => setScreen("lobby")} />}
 
       {screen === "waiting" && battle && (
         <WaitingScreen

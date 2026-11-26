@@ -1,0 +1,47 @@
+server:
+  port: ${PORT:8081}
+  # Everything lives under /auth so a reverse proxy needs one rule for it.
+  # GitHub's callback is therefore {origin}/auth/login/oauth2/code/github.
+  servlet:
+    context-path: /auth
+  # Behind a TLS-terminating proxy: trust X-Forwarded-* so the redirect URI
+  # sent to GitHub is https://your-host/... rather than http://container:8081.
+  forward-headers-strategy: framework
+
+spring:
+  application:
+    name: algobattle-auth
+  datasource:
+    url: ${AUTH_DB_URL:jdbc:h2:file:./data/auth}
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+  security:
+    oauth2:
+      client:
+        registration:
+          github:
+            client-id: ${GITHUB_CLIENT_ID:not-configured}
+            client-secret: ${GITHUB_CLIENT_SECRET:not-configured}
+            scope: read:user
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+app:
+  # Must equal the API's SECRET_KEY: both services sign and verify the same
+  # HS256 tokens, which is how a GitHub login works against the Python API.
+  jwt-secret: ${SECRET_KEY:}
+  token-ttl: ${TOKEN_TTL:7d}
+  # Where to send the browser after login, with the token in the URL fragment.
+  frontend-url: ${FRONTEND_URL:http://localhost:5173}
+  # Browser origins allowed to call /me and /admin. Defaults to the frontend.
+  allowed-origins: ${ALLOWED_ORIGINS:${FRONTEND_URL:http://localhost:5173}}
+  # GitHub logins promoted to ADMIN on sign-in (comma-separated).
+  admin-logins: ${ADMIN_GITHUB_LOGINS:}

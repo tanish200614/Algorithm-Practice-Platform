@@ -1,0 +1,52 @@
+name: Deploy (VM)
+
+# Redeploys the free-tier VM (deploy/vm/) after CI passes on main. The
+# frontend needs nothing here: Vercel builds it from the same push.
+#
+# Setup, once: repository Settings > Secrets and variables > Actions
+#   Variables: VM_HOST (IP or hostname), VM_USER (e.g. ubuntu), VM_REPO_DIR
+#              (path of the clone on the VM, e.g. /home/ubuntu/Algorithm-Practice-Platform)
+#   Secrets:   VM_SSH_KEY (private key whose public half is in the VM's
+#              ~/.ssh/authorized_keys)
+# Until VM_HOST is set this workflow skips itself.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-vm
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      vars.VM_HOST != '' &&
+      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull, rebuild, restart
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ vars.VM_HOST }}
+          username: ${{ vars.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          command_timeout: 30m
+          script: |
+            set -e
+            cd "${{ vars.VM_REPO_DIR }}"
+            git fetch --quiet origin main
+            git reset --hard origin/main
+            ./sandbox/build.sh > /dev/null
+            cd deploy/vm
+            docker compose up -d --build --remove-orphans
+            docker image prune -f > /dev/null
+            # Fail the run if the API doesn't come back.
+            for i in $(seq 1 30); do
+              if docker compose exec -T backend curl -fsS http://127.0.0.1:8000/health; then exit 0; fi
+              sleep 2
+            done
+            docker compose logs --tail 50 backend
+            exit 1

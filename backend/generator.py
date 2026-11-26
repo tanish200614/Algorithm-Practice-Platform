@@ -136,6 +136,11 @@ def generate_problem(topic: str, difficulty: str = "medium", attempts: int = 3) 
 
     Retries skip the cache, otherwise we'd get the same broken problem back.
     """
+    # Normalise before it reaches the prompt, which is the cache key: "Graphs ",
+    # "graphs" and "GRAPHS" are the same request and should share one entry.
+    topic = " ".join(topic.lower().split())
+    difficulty = difficulty.strip().lower()
+
     reports = []
     for attempt in range(attempts):
         problem = structured(

@@ -22,3 +22,5 @@ dist/
 .vscode/
 .idea/
 llm_cache.db
+target/
+auth-service/data/
