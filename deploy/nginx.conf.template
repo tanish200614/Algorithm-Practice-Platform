@@ -56,6 +56,11 @@ server {
         proxy_send_timeout 300s;
     }
 
+    # Optional extra locations (the GitHub login service at /auth/). The
+    # compose stack mounts deploy/nginx-auth.location.template there; images
+    # deployed without it simply have nothing to include.
+    include /etc/nginx/conf.d/locations/*.conf;
+
     location /health {
         proxy_pass http://backend;
         access_log off;

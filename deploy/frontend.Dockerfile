@@ -1,6 +1,6 @@
 # Static frontend, built once and served by nginx.
 #
-# VITE_API_URL is set to "/api" at build time, so the bundle always talks to
+# VITE_API_URL / VITE_AUTH_URL are "/api" and "/auth" at build time, so the bundle always talks to
 # its own origin and the image works behind any hostname without a rebuild.
 FROM node:22-alpine AS build
 
@@ -10,7 +10,8 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 
 COPY frontend/ ./
-ENV VITE_API_URL=/api
+ENV VITE_API_URL=/api \
+    VITE_AUTH_URL=/auth
 RUN npm run build
 
 FROM nginx:1.27-alpine

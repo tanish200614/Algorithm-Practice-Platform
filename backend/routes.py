@@ -13,7 +13,8 @@ from benchmarks import (
     run_cpp_benchmark_with_opt,
 )
 from ml import elo, solve_times, difficulty
-from auth import hash_password, verify_password, create_token, get_current_user
+from auth import (GITHUB_PREFIX, create_token, get_current_claims, hash_password,
+                  verify_password)
 from database import create_user, get_user, get_stats, all_stats
 
 router = APIRouter()
@@ -30,6 +31,8 @@ class AuthRequest(BaseModel):
 def register(req: AuthRequest):
     if not re.match(r'^[a-zA-Z0-9_]{3,16}$', req.username):
         raise HTTPException(400, "Username must be 3-16 alphanumeric characters")
+    if req.username.lower().startswith(GITHUB_PREFIX):
+        raise HTTPException(400, f"Usernames starting with '{GITHUB_PREFIX}' are reserved for GitHub logins")
     if len(req.password) < 6:
         raise HTTPException(400, "Password must be at least 6 characters")
     if not create_user(req.username, hash_password(req.password)):
@@ -48,7 +51,8 @@ def login(req: AuthRequest):
 
 
 @router.get("/me")
-def me(username: str = Depends(get_current_user)):
+def me(claims: dict = Depends(get_current_claims)):
+    username = claims["sub"]
     stats = get_stats(username)
     skill = stats["skill"]
     tier = elo.tier(username)
@@ -58,6 +62,9 @@ def me(username: str = Depends(get_current_user)):
         "skill": round(skill),
         "tier": tier,
         "solves": stats["solves"],
+        "roles": claims["roles"],
+        "provider": claims.get("provider", "password"),
+        "avatar_url": claims.get("avatar_url"),
         "recommendation": {"id": rec, "title": PROBLEMS[rec]["title"]},
     }
 

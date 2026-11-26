@@ -1,0 +1,89 @@
+# Production stack for a single free VM (see deploy/vm/README.md).
+#
+#   Caddy (:443, automatic HTTPS)
+#     /api/*, /health  -> backend  (FastAPI + WebSockets, runs sandboxes)
+#     /auth/*          -> auth     (Spring Boot GitHub OAuth2 + JWT + RBAC)
+#   redis              -> LLM response cache + AI rate limits
+#
+# The frontend is NOT served from here; it's a static build on Vercel that
+# calls https://$DOMAIN/api and https://$DOMAIN/auth.
+#
+#   cd deploy/vm && cp .env.example .env && $EDITOR .env
+#   ../../sandbox/build.sh && docker compose up -d --build
+
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backend
+      - auth
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: deploy/backend.Dockerfile
+    restart: unless-stopped
+    environment:
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+      SANDBOX_MODE: docker
+      ALLOWED_ORIGINS: ${FRONTEND_URL:?set FRONTEND_URL in .env}
+      DB_PATH: /data/algobattle.db
+      REDIS_URL: redis://redis:6379/0
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      AI_INTERVIEW_LIMIT_PER_HOUR: ${AI_INTERVIEW_LIMIT_PER_HOUR:-40}
+      AI_GENERATE_LIMIT_PER_HOUR: ${AI_GENERATE_LIMIT_PER_HOUR:-10}
+    volumes:
+      # Starts each submission in its own sibling container. This socket is
+      # root-equivalent on the VM, so run nothing else on it.
+      - /var/run/docker.sock:/var/run/docker.sock
+      - backend-data:/data
+    expose:
+      - "8000"
+    depends_on:
+      - redis
+
+  auth:
+    build:
+      context: ../../auth-service
+    restart: unless-stopped
+    environment:
+      SECRET_KEY: ${SECRET_KEY}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:?set GITHUB_CLIENT_ID in .env}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:?set GITHUB_CLIENT_SECRET in .env}
+      FRONTEND_URL: ${FRONTEND_URL}
+      ALLOWED_ORIGINS: ${FRONTEND_URL}
+      ADMIN_GITHUB_LOGINS: ${ADMIN_GITHUB_LOGINS:-}
+    volumes:
+      - auth-data:/data
+    expose:
+      - "8081"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Cache, not a database: cap memory and evict old entries instead of
+    # failing writes. AOF so rate-limit windows survive a restart.
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru",
+              "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    expose:
+      - "6379"
+
+volumes:
+  caddy-data:
+  caddy-config:
+  backend-data:
+  auth-data:
+  redis-data:

@@ -1,11 +1,40 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { api } from "../api.js";
+import { api, tokenClaims } from "../api.js";
 
 const TOKEN_KEY = "ab_token";
 const USER_KEY = "ab_username";
 
+// The GitHub login service redirects back with #token=... (or #auth_error=...).
+// Take it out of the URL immediately so it isn't left in history or copied
+// along with a shared link, and store it like any other login.
+function takeRedirect() {
+  if (typeof window === "undefined" || !window.location.hash) return null;
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  const token = params.get("token");
+  const error = params.get("auth_error");
+  if (!token && !error) return null;
+  window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  if (token) {
+    const sub = tokenClaims(token).sub;
+    if (sub) {
+      try {
+        localStorage.setItem(TOKEN_KEY, token);
+        localStorage.setItem(USER_KEY, sub);
+      } catch {
+        return { token, username: sub };
+      }
+    }
+  }
+  return { error };
+}
+
+const REDIRECT = takeRedirect();
+export const loginRedirectError = REDIRECT?.error ?? null;
+
 function readStored() {
+  // Storage blocked: fall back to the token we were just handed.
+  if (REDIRECT?.token) return { token: REDIRECT.token, username: REDIRECT.username };
   try {
     const token = localStorage.getItem(TOKEN_KEY);
     const username = localStorage.getItem(USER_KEY);

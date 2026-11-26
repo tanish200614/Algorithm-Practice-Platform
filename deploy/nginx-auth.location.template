@@ -1,0 +1,11 @@
+# GitHub login service. Rendered into /etc/nginx/conf.d/locations/ and
+# included inside the server block of nginx.conf.template.
+location /auth/ {
+    proxy_pass http://${AUTH_HOST}:8081;
+    # $http_host keeps the port the browser used (e.g. :8080), so the OAuth
+    # redirect URI Spring builds points back at the right place.
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Forwarded-Host $http_host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}

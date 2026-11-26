@@ -8,7 +8,11 @@ pyjwt==2.12.1
 passlib[bcrypt]==1.7.4
 bcrypt==3.2.2
 
+# Cache + rate limits (only used when REDIS_URL is set)
+redis==5.2.1
+
 # Tests
+fakeredis==2.26.2
 pytest==8.4.2
 httpx==0.28.1
 openai

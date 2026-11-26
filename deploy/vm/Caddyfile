@@ -1,0 +1,26 @@
+# Caddy gets and renews a Let's Encrypt certificate for {$DOMAIN} by itself.
+# It proxies WebSockets without extra config.
+{$DOMAIN} {
+	encode gzip
+
+	handle /api/* {
+		reverse_proxy backend:8000 {
+			# A benchmark runs a submission at six input sizes.
+			transport http {
+				read_timeout 300s
+			}
+		}
+	}
+
+	handle /health {
+		reverse_proxy backend:8000
+	}
+
+	handle /auth/* {
+		reverse_proxy auth:8081
+	}
+
+	handle {
+		respond "AlgoBattle API — the app lives on the frontend URL." 200
+	}
+}
